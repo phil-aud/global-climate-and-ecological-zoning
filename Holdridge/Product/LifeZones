@@ -64,7 +64,7 @@ var pol;
 
 // Mean elevation from CGIAR SRTM data
 var elevation = ee.Image("USGS/GTOPO30");
-Map.addLayer(elevation, {}, 'el', 0);
+//Map.addLayer(elevation, {}, 'el', 0);
 // Time series of CRU monthly temperature bands since 1901
 var cruTsTmp = ee.Image("users/philipaudebert/CRU/CRU407_1901-2022/cru_ts405_1901-2022_tmp");
 // Time series of CRU monthly precipitation bands since 1901
@@ -79,7 +79,7 @@ var cruMeanMonthlyTemperature = function(image, startYear, endYear) {
 	mmtemp = mmtemp || require("users/philipaudebert/HLZs:Holdridge/Utils/CRU_FormattedDataset");
 	return mmtemp.monthlyMeanD(image, startYear, endYear);
 	};
-Map.addLayer(cruMeanMonthlyTemperature(cruTsTmp, 1991, 2020), {}, 'temp', 0);
+//Map.addLayer(cruMeanMonthlyTemperature(cruTsTmp, 1991, 2020), {}, 'temp', 0);
 
 // Monthly mean precipitation
 var cruPreMonthlyMean = function(image, startYear, endYear) {
@@ -87,14 +87,14 @@ var cruPreMonthlyMean = function(image, startYear, endYear) {
 	return mmpre.monthlyMeanD(image, startYear, endYear);
 	};
 	
-Map.addLayer(cruPreMonthlyMean(cruTsPre, 1991, 2020).sum(), {}, 'pre', 0);
+//Map.addLayer(cruPreMonthlyMean(cruTsPre, 1991, 2020).sum(), {}, 'pre', 0);
 
 // Biotemperature
   var biotemperature = function(temperatureData, elevationData, startYear, endYear) {
     biotemp = biotemp || require("users/philipaudebert/HLZs:Holdridge/Utils/Var_Biotemperature");
     return biotemp.classification(temperatureData, elevationData, startYear, endYear);
   };
-Map.addLayer(biotemperature(cruTsTmp, elevation, 1991, 2020), {}, 'biotemp', 0);
+//Map.addLayer(biotemperature(cruTsTmp, elevation, 1991, 2020), {}, 'biotemp', 0);
 	
 // Since the potential evapotranspiration is measured in mm/day it is important to adjust for leap years. The following functions calculate the average number of days for a given period of years. 
 function isLeapYear(year) {
@@ -119,8 +119,8 @@ var cruPetYearlyMean = function(image, startYear, endYear) {
 	return mmpet.monthlyMeanD(image, startYear, endYear).mean().multiply(getAverageDaysInYear(startYear, endYear));
 	};
 
-Map.addLayer(cruPetYearlyMean(cruTsPet, 1991, 2020), {}, 'pet', 0);
-Map.addLayer((cruPetYearlyMean(cruTsPet, 1991, 2020).divide(cruPreMonthlyMean(cruTsPre, 1991, 2020).sum())), {}, 'pet ratio', 0);
+//Map.addLayer(cruPetYearlyMean(cruTsPet, 1991, 2020), {}, 'pet', 0);
+//Map.addLayer((cruPetYearlyMean(cruTsPet, 1991, 2020).divide(cruPreMonthlyMean(cruTsPre, 1991, 2020).sum())), {}, 'pet ratio', 0);
 
 
 ////////////////////////////////////////////////////////////////////////////

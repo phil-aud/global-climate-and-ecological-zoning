@@ -19,19 +19,19 @@ var dec;
 
 // Mean Monthly Temperature
 var cruTempMonthlyMean = function(image, startYear, endYear) {
-	mmt = mmt || require("users/philipaudebert/GEZ:ClimateClassifications/Holdridge/Utils/CRU_FormattedDataset");
+	mmt = mmt || require("users/philipaudebert/HLZs:Holdridge/Utils/CRU_FormattedDataset");
 	return mmt.monthlyMeanD(image, startYear, endYear);
 	};
 
 // Mean monthly precipitation
 var cruPreMonthlyMean = function(image, startYear, endYear) {
-	mmpre = mmpre || require("users/philipaudebert/GEZ:ClimateClassifications/Holdridge/Utils/CRU_FormattedDataset");
+	mmpre = mmpre || require("users/philipaudebert/HLZs:Holdridge/Utils/CRU_FormattedDataset");
 	return mmpre.monthlyMeanD(image, startYear, endYear);
 	};
 	
 // Mean monthly Frost
 var cruFrsMonthlyMean = function(image, startYear, endYear) {
-	mmfr = mmfr || require("users/philipaudebert/GEZ:ClimateClassifications/Holdridge/Utils/CRU_FormattedDataset");
+	mmfr = mmfr || require("users/philipaudebert/HLZs:Holdridge/Utils/CRU_FormattedDataset");
 	return mmfr.monthlyMeanD(image, startYear, endYear);
 	};
 

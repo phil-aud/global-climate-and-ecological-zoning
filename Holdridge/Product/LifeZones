@@ -76,14 +76,14 @@ var cruTsFrs = ee.Image("users/philipaudebert/CRU/CRU407_1901-2022/cru_ts405_190
 
 // Mean Monthly Temperature
 var cruMeanMonthlyTemperature = function(image, startYear, endYear) {
-	mmtemp = mmtemp || require("users/philipaudebert/GEZ:ClimateClassifications/Holdridge/Utils/CRU_FormattedDataset");
+	mmtemp = mmtemp || require("users/philipaudebert/HLZs:Holdridge/Utils/CRU_FormattedDataset");
 	return mmtemp.monthlyMeanD(image, startYear, endYear);
 	};
 Map.addLayer(cruMeanMonthlyTemperature(cruTsTmp, 1991, 2020), {}, 'temp', 0);
 
 // Monthly mean precipitation
 var cruPreMonthlyMean = function(image, startYear, endYear) {
-	mmpre = mmpre || require("users/philipaudebert/GEZ:ClimateClassifications/Holdridge/Utils/CRU_FormattedDataset");
+	mmpre = mmpre || require("users/philipaudebert/HLZs:Holdridge/Utils/CRU_FormattedDataset");
 	return mmpre.monthlyMeanD(image, startYear, endYear);
 	};
 	
@@ -91,7 +91,7 @@ Map.addLayer(cruPreMonthlyMean(cruTsPre, 1991, 2020).sum(), {}, 'pre', 0);
 
 // Biotemperature
   var biotemperature = function(temperatureData, elevationData, startYear, endYear) {
-    biotemp = biotemp || require("users/philipaudebert/GEZ:ClimateClassifications/Holdridge/Utils/Var_Biotemperature");
+    biotemp = biotemp || require("users/philipaudebert/HLZs:Holdridge/Utils/Var_Biotemperature");
     return biotemp.classification(temperatureData, elevationData, startYear, endYear);
   };
 Map.addLayer(biotemperature(cruTsTmp, elevation, 1991, 2020), {}, 'biotemp', 0);
@@ -115,7 +115,7 @@ function getAverageDaysInYear(startYear, endYear) {
 
 // Monthly mean potential evapotranspiration
 var cruPetYearlyMean = function(image, startYear, endYear) {
-	mmpet = mmpet || require("users/philipaudebert/GEZ:ClimateClassifications/Holdridge/Utils/CRU_FormattedDataset");
+	mmpet = mmpet || require("users/philipaudebert/HLZs:Holdridge/Utils/CRU_FormattedDataset");
 	return mmpet.monthlyMeanD(image, startYear, endYear).mean().multiply(getAverageDaysInYear(startYear, endYear));
 	};
 
@@ -129,43 +129,43 @@ Map.addLayer((cruPetYearlyMean(cruTsPet, 1991, 2020).divide(cruPreMonthlyMean(cr
 
 // A: Tropical - Mean annual biotemperature >= 24°C
   var A = function(precipitationData, temperatureData, elevationData, startYear, endYear) {
-    trop = trop || require("users/philipaudebert/GEZ:ClimateClassifications/Holdridge/Utils/A_Tropical");
+    trop = trop || require("users/philipaudebert/HLZs:Holdridge/Utils/A_Tropical");
     return trop.classification(precipitationData, temperatureData, elevationData, startYear, endYear);
   };
   
 // B: Subtropical - 24°C > Mean annual biotemperature >= 12°C & Above frost line (>0.5°C)
   var B = function(precipitationData, temperatureData, frostData, elevationData, startYear, endYear) {
-    subtrop = subtrop || require("users/philipaudebert/GEZ:ClimateClassifications/Holdridge/Utils/B_Subtropical");
+    subtrop = subtrop || require("users/philipaudebert/HLZs:Holdridge/Utils/B_Subtropical");
     return subtrop.classification(precipitationData, temperatureData, frostData, elevationData, startYear, endYear);
   };
 
 // C: Warm Temperate - 18°C > Mean annual biotemperature >= 12°C & Below frost line (>0.5°C)
   var C = function(precipitationData, temperatureData, frostData, elevationData, startYear, endYear) {
-    warmT = warmT || require("users/philipaudebert/GEZ:ClimateClassifications/Holdridge/Utils/C_WarmTemperate");
+    warmT = warmT || require("users/philipaudebert/HLZs:Holdridge/Utils/C_WarmTemperate");
     return warmT.classification(precipitationData, temperatureData, frostData, elevationData, startYear, endYear);
   };
   
 // D: Cool Temperate - 12°C > Mean annual biotemperature >= 6°C
   var D = function(precipitationData, temperatureData, elevationData, startYear, endYear) {
-    coolT = coolT || require("users/philipaudebert/GEZ:ClimateClassifications/Holdridge/Utils/D_CoolTemperate");
+    coolT = coolT || require("users/philipaudebert/HLZs:Holdridge/Utils/D_CoolTemperate");
     return coolT.classification(precipitationData, temperatureData, elevationData, startYear, endYear);
   };
   
 // E: Boreal - 6°C > Mean annual biotemperature >= 3°C
   var E = function(precipitationData, temperatureData, elevationData, startYear, endYear) {
-    bor = bor || require("users/philipaudebert/GEZ:ClimateClassifications/Holdridge/Utils/E_Boreal");
+    bor = bor || require("users/philipaudebert/HLZs:Holdridge/Utils/E_Boreal");
     return bor.classification(precipitationData, temperatureData, elevationData, startYear, endYear);
   };
   
 // F: Subpolar - 3°C > Mean annual biotemperature >= 1.5°C
   var F = function(precipitationData, temperatureData, elevationData, startYear, endYear) {
-    subpol = subpol || require("users/philipaudebert/GEZ:ClimateClassifications/Holdridge/Utils/F_Subpolar");
+    subpol = subpol || require("users/philipaudebert/HLZs:Holdridge/Utils/F_Subpolar");
     return subpol.classification(precipitationData, temperatureData, elevationData, startYear, endYear);
   };
   
 // G: Polar - 1.5°C > Mean annual biotemperature >= 0°C
   var G = function(precipitationData, temperatureData, elevationData, startYear, endYear) {
-    pol = pol || require("users/philipaudebert/GEZ:ClimateClassifications/Holdridge/Utils/G_Polar");
+    pol = pol || require("users/philipaudebert/HLZs:Holdridge/Utils/G_Polar");
     return pol.classification(precipitationData, temperatureData, elevationData, startYear, endYear);
   };
 

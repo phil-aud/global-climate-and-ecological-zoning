@@ -303,7 +303,9 @@ var hlz = function (startYear, endYear) {
       var tropicalAlpineWetTundra = tropicalAlpine.multiply(circumcenterHypotenuseSubpolar.gt(3).multiply(circumcenterHypotenuseSubpolar.lte(4)));
       var tropicalAlpineRainTundra = tropicalAlpine.multiply(circumcenterHypotenuseSubpolar.gt(4));
     // Tropical Nival
-      var tropicalNivalDesert = tropicalNival;
+      var tropicalNivalDesertMoist = tropicalNival.multiply(circumcenterHypotenusePolar.lte(2));
+      var tropicalNivalDesertDry = tropicalNival.multiply(circumcenterHypotenusePolar.gt(2));
+
       
   // Subtropical
     // Subtropical Premontane
@@ -341,7 +343,8 @@ var hlz = function (startYear, endYear) {
       var subtropicalAlpineWetTundra = subtropicalAlpine.multiply(circumcenterHypotenuseSubpolar.gt(3).multiply(circumcenterHypotenuseSubpolar.lte(4)));
       var subtropicalAlpineRainTundra = subtropicalAlpine.multiply(circumcenterHypotenuseSubpolar.gt(4));
     // Subtropical Nival
-      var subtropicalNivalDesert = subtropicalNival;
+      var subtropicalNivalDesertMoist = subtropicalNival.multiply(circumcenterHypotenuseSubpolar.lte(2));
+      var subtropicalNivalDesertDry = subtropicalNival.multiply(circumcenterHypotenuseSubpolar.gt(2));
       
   // Warm Temperate
     // Warm Temperate Lower Montane
@@ -371,7 +374,8 @@ var hlz = function (startYear, endYear) {
       var warmTemperateAlpineWetTundra = warmTemperateAlpine.multiply(circumcenterHypotenuseSubpolar.gt(3).multiply(circumcenterHypotenuseSubpolar.lte(4)));
       var warmTemperateAlpineRainTundra = warmTemperateAlpine.multiply(circumcenterHypotenuseSubpolar.gt(4));
     // Warm Temperate Nival
-      var warmTemperateNivalDesert = warmTemperateNival;
+      var warmTemperateNivalDesertMoist = warmTemperateNival.multiply(circumcenterHypotenuseSubpolar.lte(2));
+      var warmTemperateNivalDesertDry = warmTemperateNival.multiply(circumcenterHypotenuseSubpolar.gt(2));
       
   // Cool Temperate
     // Cool Temperate Montane
@@ -393,7 +397,8 @@ var hlz = function (startYear, endYear) {
       var coolTemperateAlpineWetTundra = coolTemperateAlpine.multiply(circumcenterHypotenuseSubpolar.gt(3).multiply(circumcenterHypotenuseSubpolar.lte(4)));
       var coolTemperateAlpineRainTundra = coolTemperateAlpine.multiply(circumcenterHypotenuseSubpolar.gt(4));
     // Cool Temperate Nival
-      var coolTemperateNivalDesert = coolTemperateNival;
+      var coolTemperateNivalDesertMoist = coolTemperateNival.multiply(circumcenterHypotenuseSubpolar.lte(2));
+      var coolTemperateNivalDesertDry = coolTemperateNival.multiply(circumcenterHypotenuseSubpolar.gt(2));
       
   // Boreal
     // Boreal Subalpine
@@ -408,7 +413,8 @@ var hlz = function (startYear, endYear) {
       var borealAlpineWetTundra = borealAlpine.multiply(circumcenterHypotenuseSubpolar.gt(3).multiply(circumcenterHypotenuseSubpolar.lte(4)));
       var borealAlpineRainTundra = borealAlpine.multiply(circumcenterHypotenuseSubpolar.gt(4));
     // Boreal Nival
-      var borealNivalDesert = borealNival;
+      var borealNivalDesertMoist = borealNival.multiply(circumcenterHypotenuseSubpolar.lte(2));
+      var borealNivalDesertDry = borealNival.multiply(circumcenterHypotenuseSubpolar.gt(2));
       
   // Subpolar
     // Subpolar Alpine
@@ -417,11 +423,13 @@ var hlz = function (startYear, endYear) {
       var subpolarAlpineWetTundra = subpolarAlpine.multiply(circumcenterHypotenuseSubpolar.gt(3).multiply(circumcenterHypotenuseSubpolar.lte(4)));
       var subpolarAlpineRainTundra = subpolarAlpine.multiply(circumcenterHypotenuseSubpolar.gt(4));
     // Subpolar Nival
-      var subpolarNivalDesert = subpolarNival;
+      var subpolarNivalDesertMoist = subpolarNival.multiply(circumcenterHypotenuseSubpolar.lte(2));
+      var subpolarNivalDesertDry = subpolarNival.multiply(circumcenterHypotenuseSubpolar.gt(2));
       
   // Polar
     // Subpolar Nival
-      var polarNivalDesert = polarNival;
+      var polarNivalDesertMoist = polarNival.multiply(circumcenterHypotenuseSubpolar.lte(2));
+      var polarNivalDesertDry = polarNival.multiply(circumcenterHypotenuseSubpolar.gt(2));
       
     
   
@@ -519,7 +527,8 @@ var hlz = function (startYear, endYear) {
       .add(tropicalAlpineMoistTundra.multiply(163))
       .add(tropicalAlpineDryTundra.multiply(164))
       // Tropical Nival region
-      .add(tropicalNivalDesert.multiply(171))
+      .add(tropicalNivalDesertMoist.multiply(171))
+      .add(tropicalNivalDesertDry.multiply(172))
       
     // Subtropical region
       // Subtropical Premontane region
@@ -557,7 +566,8 @@ var hlz = function (startYear, endYear) {
       .add(subtropicalAlpineMoistTundra.multiply(253))
       .add(subtropicalAlpineDryTundra.multiply(254))
       // Subtropical Nival region
-      .add(subtropicalNivalDesert.multiply(261))
+      .add(subtropicalNivalDesertMoist.multiply(261))
+      .add(subtropicalNivalDesertDry.multiply(262))
       
     // Warm Temperate region
       // Warm Temperate Lower Montane region
@@ -587,7 +597,8 @@ var hlz = function (startYear, endYear) {
       .add(warmTemperateAlpineMoistTundra.multiply(343))
       .add(warmTemperateAlpineDryTundra.multiply(344))
       // Warm Temperate Nival region
-      .add(warmTemperateNivalDesert.multiply(351))
+      .add(warmTemperateNivalDesertMoist.multiply(351))
+      .add(warmTemperateNivalDesertDry.multiply(352))
       
     // Cool Temperate region
       // Cool Temperate Montane region
@@ -609,7 +620,8 @@ var hlz = function (startYear, endYear) {
       .add(coolTemperateAlpineMoistTundra.multiply(433))
       .add(coolTemperateAlpineDryTundra.multiply(434))
       // Cool Temperate Nival region
-      .add(coolTemperateNivalDesert.multiply(441))
+      .add(coolTemperateNivalDesertMoist.multiply(441))
+      .add(coolTemperateNivalDesertDry.multiply(442))
       
     // Boreal region
       // Boreal Subalpine region
@@ -624,7 +636,8 @@ var hlz = function (startYear, endYear) {
       .add(borealAlpineMoistTundra.multiply(523))
       .add(borealAlpineDryTundra.multiply(524))
       // Boreal Nival region
-      .add(borealNivalDesert.multiply(531))
+      .add(borealNivalDesertMoist.multiply(531))
+      .add(borealNivalDesertDry.multiply(532))
       
     // Subpolar region
       // Subpolar Alpine region
@@ -633,11 +646,13 @@ var hlz = function (startYear, endYear) {
       .add(subpolarAlpineMoistTundra.multiply(613))
       .add(subpolarAlpineDryTundra.multiply(614))
       // Subpolar Nival region
-      .add(subpolarNivalDesert.multiply(621))
+      .add(subpolarNivalDesertMoist.multiply(621))
+      .add(subpolarNivalDesertDry.multiply(622))
       
     // Polar region
       // Polar Nival region
-      .add(polarNivalDesert.multiply(711));
+      .add(polarNivalDesertMoist.multiply(711))
+      .add(polarNivalDesertDry.multiply(712));
 
   
   return lifeZones; //latitudinalRegionsAltidudinalBelts

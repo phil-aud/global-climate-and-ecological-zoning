@@ -47,75 +47,53 @@ var gez2023 = function (startYear, endYear) {
   711,
   ],
   [
-  11, 11, 11, 12, 13, 14, 14, 15,
-  21, 21, 22, 23, 24, 24, 25,
-  31, 31, 32, 33, 34, 34, 35,
-  41, 41, 42, 43, 43, 44,
-  51, 51, 52, 53, 54,
-  61, 61, 62, 63, 
-  71,
-  21, 21, 22, 23, 24, 24, 25,
-  31, 31, 32, 33, 34, 34, 35,
-  41, 41, 42, 43, 43, 44,
-  51, 51, 52, 53, 54,
-  61, 61, 62, 63, 
-  71,
-  31, 31, 32, 33, 34, 34, 35,
-  41, 41, 42, 43, 43, 44,
-  51, 51, 52, 53, 54,
-  61, 61, 62, 63, 
-  71,
-  41, 41, 42, 43, 43, 44,
-  51, 51, 52, 53, 54,
-  61, 61, 62, 63, 
-  71,
-  51, 51, 52, 53, 54,
-  61, 61, 62, 63, 
-  71,
-  61, 61, 62, 63, 
-  71,
-  71,
+  1, 1, 1, 2, 3, 3, 3, 3,
+  4, 4, 4, 5, 5, 5, 5,
+  4, 4, 4, 5, 5, 5, 5,
+  6, 6, 6, 7, 7, 7,
+  8, 8, 8, 9, 9,
+  10, 10, 10, 10, 
+  10,
+  4, 4, 4, 5, 5, 5, 5,
+  4, 4, 4, 5, 5, 5, 5,
+  6, 6, 6, 7, 7, 7,
+  8, 8, 8, 9, 9,
+  10, 10, 10, 10, 
+  10,
+  4, 4, 4, 5, 5, 5, 5,
+  6, 6, 6, 7, 7, 7,
+  8, 8, 8, 9, 9,
+  10, 10, 10, 10, 
+  10,
+  6, 6, 6, 7, 7, 7,
+  8, 8, 8, 9, 9,
+  10, 10, 10, 10, 
+  10,
+  8, 8, 8, 9, 9,
+  10, 10, 10, 10, 
+  10,
+  10, 10, 10, 10, 
+  10,
+  10,
     ]);
     return hlzc
 };
 //Map.addLayer(gez2023(1991, 2020), {}, 'final', 0); 
 
+// Define an SLD style of discrete intervals to apply to the image.
 var sld_intervals =
 '<RasterSymbolizer>' +
   '<ColorMap type="intervals" extended="false">' +
-    '<ColorMapEntry color="#C71D31" quantity="11" label="Tropical rainforest"/>' +
-    '<ColorMapEntry color="#D64758" quantity="12" label="Tropical moist forest"/>' +
-    '<ColorMapEntry color="#E37280" quantity="13" label="Tropical dry forest"/>' +
-    '<ColorMapEntry color="#EEA0A9" quantity="14" label="Tropical shrubland"/>' +
-    '<ColorMapEntry color="#F7CED3" quantity="15" label="Tropical desert"/>' + 
-    
-    '<ColorMapEntry color="#F17C1D" quantity="21" label="Subtropical rain forest"/>' +
-    '<ColorMapEntry color="#F89646" quantity="22" label="Subtropical moist forest"/>' +
-    '<ColorMapEntry color="#FDB071" quantity="23" label="Subtropical dry forest"/>' +
-    '<ColorMapEntry color="#FFCA9E" quantity="24" label="Subtropical shrubland"/>' +
-    '<ColorMapEntry color="#FFE4CE" quantity="25" label="Subtropical desert"/>' +
-    
-    '<ColorMapEntry color="#FFDD00" quantity="31" label="Temperate rain forest"/>' +
-    '<ColorMapEntry color="#FFE833" quantity="32" label="Temperate moist forest"/>' +
-    '<ColorMapEntry color="#FFF066" quantity="33" label="Temperate dry forest"/>' +
-    '<ColorMapEntry color="#FFF799" quantity="34" label="Temperate shrubland"/>' +
-    '<ColorMapEntry color="#FFFCCC" quantity="35" label="Temperate desert"/>' +
-    
-    '<ColorMapEntry color="#74A900" quantity="41" label="Cool Temperate rain/wet forest"/>' +
-    '<ColorMapEntry color="#9BC444" quantity="42" label="Cool Temperate moist forst"/>' +
-    '<ColorMapEntry color="#C0DC88" quantity="43" label="Cool Temperate steppe"/>' +
-    '<ColorMapEntry color="#E5F1CC" quantity="44" label="Cool Temperate desert"/>' +
-    
-    '<ColorMapEntry color="#009F49" quantity="51" label="Boreal rain/wet forest"/>' +
-    '<ColorMapEntry color="#44BD79" quantity="52" label="Boreal moist forest"/>' +
-    '<ColorMapEntry color="#88D7AA" quantity="53" label="Boreal dry scrub"/>' +
-    '<ColorMapEntry color="#CCEFDA" quantity="54" label="Boreal desert"/>' +
-    
-    '<ColorMapEntry color="#0088D6" quantity="61" label="Subpolar rain/wet tundra"/>' +
-    '<ColorMapEntry color="#66B9ED" quantity="62" label="Subpolar moist tundra"/>' +
-    '<ColorMapEntry color="#CCE8FB" quantity="63" label="Subpolar dry tundra"/>' +
-    
-    '<ColorMapEntry color="#1451a0" quantity="71" label="Polar"/>' +
+    '<ColorMapEntry color="#43896e" quantity="1" label="Tropical Wet"/>' +
+    '<ColorMapEntry color="#89ce65" quantity="2" label="Tropical Moist"/>' +
+    '<ColorMapEntry color="#f5f67a" quantity="3" label="Tropical Dry"/>' +
+    '<ColorMapEntry color="#72e0fe" quantity="4" label="Warm Temperate Moist"/>' +
+    '<ColorMapEntry color="#ffd381" quantity="5" label="Warm Temperate Dry"/>' +
+    '<ColorMapEntry color="#cef57a" quantity="6" label="Cool Temperate Moist"/>' +
+    '<ColorMapEntry color="#c29fd8" quantity="7" label="Cool Temperate Dry"/>' +
+    '<ColorMapEntry color="#9eaad7" quantity="8" label="Boreal Moist"/>' +
+    '<ColorMapEntry color="#d8d89f" quantity="9" label="Boreal Dry"/>' +
+    '<ColorMapEntry color="#d7ffe8" quantity="10" label="Polar"/>' +
   '</ColorMap>' +
 '</RasterSymbolizer>';
 
@@ -129,15 +107,14 @@ Map.addLayer(gez2023(1991, 2020).sldStyle(sld_intervals), {}, 'HLZ - Level1');
 function createLegend() {
     var legend = ui.Panel({
     style: {
-      maxHeight: '800px',
       position: 'bottom-right',
       padding: '8px 15px'
     }
-  });
+  })
 
   // Create legend title
   var legendTitle = ui.Label({
-    value: 'Holdridge Life Zones',
+    value: 'IPCC Climate Zones',
     style: {
       fontWeight: 'bold',
       fontSize: '18px',
@@ -176,37 +153,32 @@ function createLegend() {
 };
 
 
-var palette = [
-'C71D31','D64758','E37280','EEA0A9','F7CED3',
-'F17C1D','F89646','FDB071','FFCA9E','FFE4CE',
-'FFDD00','FFE833','FFF066','FFF799','FFFCCC',
-'74A900','9BC444', 'C0DC88','E5F1CC',
-'009F49','44BD79', '88D7AA','CCEFDA',
-'0088D6','66B9ED', 'CCE8FB',
-'1451a0']; 
+var ipccPalette = [
+    '43896e', '89ce65', 'f5f67a', '72e0fe', 'ffd381',
+    'cef57a', 'c29fd8', '9eaad7', 'd8d89f', 'd7ffe8',
+  ];
+
 
 
 // name of the legend
-var names = ["Tropical rainforest","Tropical moist forest","Tropical dry forest", "Tropical shrubland","Tropical desert","Subtropical rain forest","Subtropical moist forest","Subtropical dry forest","Subtropical steppe/shrubland","Subtropical desert","Warm Temperate rain/wet forest","Warm Temperate moist forest","Warm Temperate dry forest","Warm Temperate steppe/shrubland","Warm Temperate desert","Cool Temperate rain/wet forest","Cool Temperate moist forest","Cool Temperate steppe","Cool Temperate desert", "Boreal rain/wet forest", "Boreal moist forest", "Boreal dry scrub", "Boreal desert", "Subpolar rain/wet tundra", "Subpolar moist tundra", "Subpolar dry tundra", "Polar desert"];
+var names = [ 
+"Tropical Wet",
+"Tropical Moist",
+"Tropical Dry",
+"Warm Temperate Moist",
+"Warm Temperate Dry",
+"Cool Temperate Moist",
+"Cool Temperate Dry",
+"Boreal Moist",
+"Boreal Dry",
+"Polar Moist"
+  ];
   
   // Add color and and names
-for (var i = 0; i < 27; i++) {
-  legend.add(makeRow(palette[i], names[i]));
+for (var i = 0; i < 10; i++) {
+  legend.add(makeRow(ipccPalette[i], names[i]));
   }  
   return legend;
 }
 Map.add(createLegend());
-
-
-/*
-var region = ee.Geometry.Rectangle([-180, -90, 180, 90]);
-Export.image.toDrive({
-  image: gez2023(1991, 2020),
-  description: 'gez2023',
-  scale: 1000,
-  fileFormat: 'GeoTIFF',
-  maxPixels: 1e13
-});
-
-*/
 

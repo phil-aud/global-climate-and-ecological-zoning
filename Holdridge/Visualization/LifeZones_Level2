@@ -162,6 +162,124 @@ Map.setCenter(0, 35, 2);
 Map.addLayer(holdridgeLifeZones(1991, 2020).sldStyle(sld_intervals), {}, 'Holdridge Life Zones '+'1961'+'-'+'1990');
 
 
+///////////////////////// REMAP
+
+var lv2HLZ = function (startYear, endYear) {
+  var hlzc = holdridgeLifeZones(startYear, endYear).remap([
+  111, 112, 113, 114, 115, 116, 117, 118,
+  121, 122, 123, 124, 125, 126, 127,
+  131, 132, 133, 134, 135, 136, 137,
+  141, 142, 143, 144, 145, 146,
+  151, 152, 153, 154, 155,
+  161, 162, 163, 164, 
+  171,
+  211, 212, 213, 214, 215, 216, 217,
+  221, 222, 223, 224, 225, 226, 227,
+  231, 232, 233, 234, 245, 236,
+  241, 242, 243, 244, 245,
+  251, 252, 253, 254, 
+  261,
+  311, 312, 313, 314, 315, 316, 317,
+  321, 322, 323, 324, 325, 326,
+  331, 332, 333, 334, 335,
+  341, 342, 343, 344,
+  351,
+  411, 412, 413, 414, 415, 416,
+  421, 422, 423, 424, 425,
+  431, 432, 433, 434, 
+  441,
+  511, 512, 513, 514, 515,
+  521, 522, 523, 524, 
+  531,
+  611, 612, 613, 614, 
+  621, // changed from 631 to 621 on 20/10/2025
+  711,
+  ],
+  [
+  11, 12, 13, 14, 15, 16, 17, 18,
+  21, 22, 23, 24, 25, 26, 27,
+  31, 32, 33, 34, 35, 36, 37,
+  41, 42, 43, 44, 45, 46,
+  51, 52, 53, 54, 55,
+  61, 62, 63, 64, 
+  71,
+  21, 22, 23, 24, 25, 26, 27,
+  31, 32, 33, 34, 35, 36, 37,
+  41, 42, 43, 44, 45, 46,
+  51, 52, 53, 54, 55,
+  61, 62, 63, 64, 
+  71,
+  31, 32, 33, 34, 35, 36, 37,
+  41, 42, 43, 44, 45, 46,
+  51, 52, 53, 54, 55,
+  61, 62, 63, 64, 
+  71,
+  41, 42, 43, 44, 45, 46,
+  51, 52, 53, 54, 55,
+  61, 62, 63, 64, 
+  71,
+  51, 52, 53, 54, 55,
+  61, 62, 63, 64, 
+  71,
+  61, 62, 63, 64, 
+  71,
+  71,
+    ]);
+    return hlzc
+};
+
+var sld_intervalsHLZ2 =
+'<RasterSymbolizer>' +
+  '<ColorMap type="intervals" extended="false">' +
+    '<ColorMapEntry color="#ce1d09" quantity="11" label="Tropical rainforest"/>' +
+    '<ColorMapEntry color="#ce1d09" quantity="12" label="Tropical wet forest"/>' +
+    '<ColorMapEntry color="#D53B2A" quantity="13" label="Tropical moist forest"/>' +
+    '<ColorMapEntry color="#DB594B" quantity="14" label="Tropical dry forest"/>' +
+    '<ColorMapEntry color="#E2776B" quantity="15" label="Tropical very dry forest"/>' + 
+    '<ColorMapEntry color="#E8968C" quantity="16" label="Tropical thorn woodland"/>' + 
+    '<ColorMapEntry color="#EFB4AD" quantity="17" label="Tropical desert scrub"/>' + 
+    '<ColorMapEntry color="#F5D2CE" quantity="18" label="Tropical desert"/>' + 
+    
+    '<ColorMapEntry color="#f19137" quantity="21" label="Subtropical rain forest"/>' +
+    '<ColorMapEntry color="#F3A052" quantity="22" label="Subtropical wet forest"/>' +
+    '<ColorMapEntry color="#F5AE6C" quantity="23" label="Subtropical moist forest"/>' +
+    '<ColorMapEntry color="#F7BD87" quantity="24" label="Subtropical dry forest"/>' +
+    '<ColorMapEntry color="#F9CCA2" quantity="25" label="Subtropical thorn woodland"/>' +
+    '<ColorMapEntry color="#FADABC" quantity="26" label="Subtropical desert scrub"/>' +
+    '<ColorMapEntry color="#FCE9D7" quantity="27" label="Subtropical desert"/>' +
+
+    '<ColorMapEntry color="#ffde4a" quantity="31" label="Warm Temperate rain forest"/>' +
+    '<ColorMapEntry color="#FFE262" quantity="32" label="Warm Temperate wet forest"/>' +
+    '<ColorMapEntry color="#FFE77A" quantity="33" label="Warm Temperate moist forest"/>' +
+    '<ColorMapEntry color="#FFEB92" quantity="34" label="Warm Temperate dry forest"/>' +
+    '<ColorMapEntry color="#FFF0AB" quantity="35" label="Warm Temperate thorn woodland"/>' +
+    '<ColorMapEntry color="#FFF4C3" quantity="36" label="Warm Temperate desert scrub"/>' +
+    '<ColorMapEntry color="#FFF8DB" quantity="37" label="Warm Temperate desert"/>' +
+    
+    '<ColorMapEntry color="#9ec200" quantity="41" label="Cool Temperate rain forest"/>' +
+    '<ColorMapEntry color="#AECC29" quantity="42" label="Cool Temperate wet forst"/>' +
+    '<ColorMapEntry color="#BDD652" quantity="43" label="Cool Temperate moist forest"/>' +
+    '<ColorMapEntry color="#CDDF7A" quantity="44" label="Cool Temperate steppe"/>' +
+    '<ColorMapEntry color="#DCE9A3" quantity="45" label="Cool Temperate desert scrub"/>' +
+    '<ColorMapEntry color="#ECF3CC" quantity="46" label="Cool Temperate desert"/>' +
+    
+    '<ColorMapEntry color="#009837" quantity="51" label="Boreal rain forest"/>' +
+    '<ColorMapEntry color="#33AD5F" quantity="52" label="Boreal wet forest"/>' +
+    '<ColorMapEntry color="#66C187" quantity="53" label="Boreal moist forest"/>' +
+    '<ColorMapEntry color="#99D6AF" quantity="54" label="Boreal dry scrub"/>' +
+    '<ColorMapEntry color="#CCEAD7" quantity="55" label="Boreal desert"/>' +
+    
+    '<ColorMapEntry color="#00add6" quantity="61" label="Subpolar rain tundra"/>' +
+    '<ColorMapEntry color="#44C3E1" quantity="62" label="Subpolar wet tundra"/>' +
+    '<ColorMapEntry color="#88D9EC" quantity="63" label="Subpolar moist tundra"/>' +
+    '<ColorMapEntry color="#CCEFF7" quantity="64" label="Subpolar desert"/>' +
+    
+    '<ColorMapEntry color="#1451a0" quantity="71" label="Polar"/>' +
+  '</ColorMap>' +
+'</RasterSymbolizer>';
+
+Map.addLayer(lv2HLZ(1991, 2020).sldStyle(sld_intervalsHLZ2), {}, 'Holdridge Life Zones II '+'1961'+'-'+'1990')
+
 ///////////////////////// EXPORT
 
 Export.image.toAsset({

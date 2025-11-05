@@ -11,7 +11,7 @@ var hlz;
 
 // Mean Monthly Temperature
 var holdridgeLifeZones = function(startYear, endYear) {
-	hlz = hlz || require("users/philipaudebert/HLZs:Holdridge/Product/LifeZones");
+	hlz = hlz || require("users/philipaudebert/HLZs:Holdridge/Product/LifeZones_cru407");
 	return hlz.classification(startYear, endYear);
 	};
 

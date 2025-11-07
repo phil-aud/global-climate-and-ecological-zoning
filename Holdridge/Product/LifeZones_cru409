@@ -643,9 +643,9 @@ var hlz = function (startYear, endYear) {
   return lifeZones; //latitudinalRegionsAltidudinalBelts
 };
 
-/*
-Map.addLayer(hlz(1961, 1990), {min: 511, max: 711}, 'final', 0);
 
+//Map.addLayer(hlz(1995, 2024), {min: 100, max: 711}, 'final', 0);
+/*
 
 // Define an SLD style of discrete intervals to apply to the image.
 var sld_intervals =

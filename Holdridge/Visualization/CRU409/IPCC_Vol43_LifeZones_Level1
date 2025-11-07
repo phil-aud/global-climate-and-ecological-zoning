@@ -15,7 +15,7 @@ var holdridgeLifeZones = function(startYear, endYear) {
 	return hlz.classification(startYear, endYear);
 	};
 
-var gez2023 = function (startYear, endYear) {
+var gez = function (startYear, endYear) {
   var hlzc = holdridgeLifeZones(startYear, endYear).remap([
   111, 112, 113, 114, 115, 116, 117, 118,
   121, 122, 123, 124, 125, 126, 127,
@@ -119,10 +119,10 @@ var sld_intervals =
   '</ColorMap>' +
 '</RasterSymbolizer>';
 
-//Map.addLayer(gez2023(1901, 1930).sldStyle(sld_intervals), {}, 'HLZ - Level1');
-//Map.addLayer(gez2023(1931, 1960).sldStyle(sld_intervals), {}, 'HLZ - Level1');
-//Map.addLayer(gez2023(1961, 1990).sldStyle(sld_intervals), {}, 'HLZ - Level1');
-Map.addLayer(gez2023(1991, 2020).sldStyle(sld_intervals), {}, 'HLZ - Level1');
+//Map.addLayer(gez(1901, 1930).sldStyle(sld_intervals), {}, 'HLZ - Level1');
+//Map.addLayer(gez(1931, 1960).sldStyle(sld_intervals), {}, 'HLZ - Level1');
+//Map.addLayer(gez(1961, 1990).sldStyle(sld_intervals), {}, 'HLZ - Level1');
+Map.addLayer(gez(1995, 2024).sldStyle(sld_intervals), {}, 'HLZ - Level1');
 
 //// Create Legend
 

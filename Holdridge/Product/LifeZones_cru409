@@ -66,13 +66,13 @@ var pol;
 var elevation = ee.Image("USGS/GTOPO30");
 //Map.addLayer(elevation, {}, 'el', 0);
 // Time series of CRU monthly temperature bands since 1901
-var cruTsTmp = ee.Image("users/ee-philaudebert/CRU/CRU409_1901-2024/cru_ts409_1901-2024_tmp");
+var cruTsTmp = ee.Image("projects/ee-philaudebert/CRU/CRU409_1901-2024/cru_ts409_1901-2024_tmp");
 // Time series of CRU monthly precipitation bands since 1901
-var cruTsPre = ee.Image("users/ee-philaudebert/CRU/CRU409_1901-2024/cru_ts409_1901-2024_pre");
+var cruTsPre = ee.Image("projects/ee-philaudebert/CRU/CRU409_1901-2024/cru_ts409_1901-2024_pre");
 // Time series of CRU monthly potential evapotranspiration bands since 1901
-var cruTsPet = ee.Image("users/ee-philaudebert/CRU/CRU409_1901-2024/cru_ts409_1901-2024_pet");
+var cruTsPet = ee.Image("projects/ee-philaudebert/CRU/CRU409_1901-2024/cru_ts409_1901-2024_pet");
 // Time series of CRU frost bands since 1901
-var cruTsFrs = ee.Image("users/ee-philaudebert/CRU/CRU409_1901-2024/cru_ts409_1901-2024_frs");
+var cruTsFrs = ee.Image("projects/ee-philaudebert/CRU/CRU409_1901-2024/cru_ts409_1901-2024_frs");
 
 // Mean Monthly Temperature
 var cruMeanMonthlyTemperature = function(image, startYear, endYear) {

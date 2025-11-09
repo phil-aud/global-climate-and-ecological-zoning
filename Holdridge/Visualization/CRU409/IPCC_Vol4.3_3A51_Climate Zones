@@ -100,8 +100,8 @@ var sld_intervals =
 //Map.addLayer(gez2023(1901, 1930).sldStyle(sld_intervals), {}, 'HLZ - Level1');
 //Map.addLayer(gez2023(1931, 1960).sldStyle(sld_intervals), {}, 'HLZ - Level1');
 //Map.addLayer(gez2023(1961, 1990).sldStyle(sld_intervals), {}, 'HLZ - Level1');
-Map.addLayer(gez(1991, 2020).sldStyle(sld_intervals), {}, 'IPCC Climate Zones');
-Map.addLayer(gez(1994, 2023).sldStyle(sld_intervals), {}, 'IPCC Climate Zones');
+//Map.addLayer(gez(1991, 2020).sldStyle(sld_intervals), {}, 'IPCC Climate Zones');
+//Map.addLayer(gez(1994, 2023).sldStyle(sld_intervals), {}, 'IPCC Climate Zones');
 Map.addLayer(gez(1995, 2024).sldStyle(sld_intervals), {}, 'IPCC Climate Zones');
 
 //// Create Legend

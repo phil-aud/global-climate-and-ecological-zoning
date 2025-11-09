@@ -173,7 +173,7 @@ var names = [
 "Cool Temperate Dry",
 "Boreal Moist",
 "Boreal Dry",
-"Polar Moist"
+"Polar"
   ];
   
   // Add color and and names

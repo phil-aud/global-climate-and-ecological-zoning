@@ -198,15 +198,15 @@ for (var i = 0; i < 27; i++) {
 Map.add(createLegend());
 
 
-/*
-var region = ee.Geometry.Rectangle([-180, -90, 180, 90]);
+
+//var region = ee.Geometry.Rectangle([-180, -90, 180, 90]);
 Export.image.toDrive({
-  image: gez2023(1991, 2020),
-  description: 'gez2023',
+  image: gez(1995, 2024),
+  description: 'IPCC_GEZ_1995-2024',
   scale: 1000,
   fileFormat: 'GeoTIFF',
   maxPixels: 1e13
 });
 
-*/
+
 

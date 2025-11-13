@@ -198,7 +198,7 @@ for (var i = 0; i < 27; i++) {
 Map.add(createLegend());
 
 
-
+/*
 //var region = ee.Geometry.Rectangle([-180, -90, 180, 90]);
 Export.image.toDrive({
   image: gez(1995, 2024),
@@ -208,5 +208,5 @@ Export.image.toDrive({
   maxPixels: 1e13
 });
 
-
+*/
 

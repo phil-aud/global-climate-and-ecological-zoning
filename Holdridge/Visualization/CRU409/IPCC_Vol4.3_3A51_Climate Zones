@@ -187,7 +187,7 @@ Map.add(createLegend());
 //var region = ee.Geometry.Rectangle([-180, -90, 180, 90]);
 Export.image.toDrive({
   image: ipccClimateZones(1995, 2024),
-  description: 'IPCC_ClimateZones_1995-2024',
+  description: 'IPCC_GlobalClimateZones_1995-2024',
   scale: 1000,
   fileFormat: 'GeoTIFF',
   maxPixels: 1e13

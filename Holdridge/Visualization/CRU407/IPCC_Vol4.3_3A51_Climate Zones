@@ -182,3 +182,12 @@ for (var i = 0; i < 10; i++) {
 }
 Map.add(createLegend());
 
+Export.image.toDrive({
+  image: gez2023(1991, 2020),
+  description: 'IPCC_407_ClimateZones_1991-2020',
+  scale: 1000,
+  fileFormat: 'GeoTIFF',
+  maxPixels: 1e13
+});
+
+

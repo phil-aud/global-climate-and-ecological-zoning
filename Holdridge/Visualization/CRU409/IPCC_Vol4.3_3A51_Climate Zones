@@ -184,12 +184,21 @@ for (var i = 0; i < 10; i++) {
 }
 Map.add(createLegend());
 
+
 //var region = ee.Geometry.Rectangle([-180, -90, 180, 90]);
 Export.image.toDrive({
   image: ipccClimateZones(1995, 2024),
   description: 'IPCC_GlobalClimateZones_1995-2024',
   scale: 1000,
   fileFormat: 'GeoTIFF',
+  maxPixels: 1e13
+});
+
+//var region = ee.Geometry.Rectangle([-180, -90, 180, 90]);
+Export.image.toAsset({
+  image: ipccClimateZones(1995, 2024),
+  description: 'GCZ/IPCC_GlobalClimateZones_1995-2024',
+  scale: 1000,
   maxPixels: 1e13
 });
 

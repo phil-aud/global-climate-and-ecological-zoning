@@ -11,7 +11,7 @@ var hlz;
 
 // Mean Monthly Temperature
 var holdridgeLifeZones = function(startYear, endYear) {
-	hlz = hlz || require("users/philipaudebert/HLZs:Holdridge/Product/LifeZones_cru407");
+	hlz = hlz || require("users/philipaudebert/HLZs:Holdridge/Product/LifeZones_cru404");
 	return hlz.classification(startYear, endYear);
 	};
 
@@ -184,7 +184,7 @@ Map.add(createLegend());
 
 Export.image.toDrive({
   image: gez2023(1991, 2020),
-  description: 'IPCC_407_ClimateZones_1991-2020',
+  description: 'IPCC_404_ClimateZones_1985-2015',
   scale: 1000,
   fileFormat: 'GeoTIFF',
   maxPixels: 1e13

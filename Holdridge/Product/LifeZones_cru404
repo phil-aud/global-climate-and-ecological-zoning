@@ -70,16 +70,22 @@ var cruTsTmp = ee.Image("projects/ee-philaudebert/assets/CRU/CRU400_1901-2015/cr
 // Time series of CRU monthly precipitation bands since 1901
 var cruTsPre = ee.Image("projects/ee-philaudebert/assets/CRU/CRU400_1901-2015/cru_ts404_1901-2015_pre");
 // Time series of CRU monthly potential evapotranspiration bands since 1901
-var cruTsPet = ee.Image("projects/ee-philaudebert/assets/CRU/CRU400_1901-2015/cru_ts404_1901-2015_pet");
+var cruTsPet = ee.Image("users/philipaudebert/CRU/1901-2015/cru_pet_clim_1901_2015_projected_floating");
 // Time series of CRU frost bands since 1901
 var cruTsFrs = ee.Image("projects/ee-philaudebert/assets/CRU/CRU400_1901-2015/cru_ts404_1901-2015_frs");
+
+Map.addLayer(cruTsTmp)
+Map.addLayer(cruTsPre)
+Map.addLayer(cruTsPet)
+Map.addLayer(cruTsFrs)
+
 
 // Mean Monthly Temperature
 var cruMeanMonthlyTemperature = function(image, startYear, endYear) {
 	mmtemp = mmtemp || require("users/philipaudebert/HLZs:Holdridge/Utils/CRU_FormattedDataset");
 	return mmtemp.monthlyMeanD(image, startYear, endYear);
 	};
-//Map.addLayer(cruMeanMonthlyTemperature(cruTsTmp, 1991, 2015), {}, 'temp', 0);
+Map.addLayer(cruMeanMonthlyTemperature(cruTsTmp, 1991, 2015), {}, 'temp', 0);
 
 // Monthly mean precipitation
 var cruPreMonthlyMean = function(image, startYear, endYear) {
@@ -87,7 +93,7 @@ var cruPreMonthlyMean = function(image, startYear, endYear) {
 	return mmpre.monthlyMeanD(image, startYear, endYear);
 	};
 	
-//Map.addLayer(cruPreMonthlyMean(cruTsPre, 1991, 2020).sum(), {}, 'pre', 0);
+Map.addLayer(cruPreMonthlyMean(cruTsPre, 1991, 2015).sum(), {}, 'pre', 0);
 
 // Biotemperature
   var biotemperature = function(temperatureData, elevationData, startYear, endYear) {

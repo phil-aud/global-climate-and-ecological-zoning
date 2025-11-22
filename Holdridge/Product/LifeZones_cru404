@@ -70,7 +70,7 @@ var cruTsTmp = ee.Image("projects/ee-philaudebert/assets/CRU/CRU400_1901-2015/cr
 // Time series of CRU monthly precipitation bands since 1901
 var cruTsPre = ee.Image("projects/ee-philaudebert/assets/CRU/CRU400_1901-2015/cru_ts404_1901-2015_pre");
 // Time series of CRU monthly potential evapotranspiration bands since 1901
-var cruTsPet = ee.Image("users/philipaudebert/CRU/1901-2015/cru_pet_clim_1901_2015_projected_floating");
+var cruTsPet = ee.Image("projects/ee-philaudebert/assets/CRU/CRU400_1901-2015/cru_ts404_1901-2015_pet");
 // Time series of CRU frost bands since 1901
 var cruTsFrs = ee.Image("projects/ee-philaudebert/assets/CRU/CRU400_1901-2015/cru_ts404_1901-2015_frs");
 

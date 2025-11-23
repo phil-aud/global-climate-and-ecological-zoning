@@ -114,9 +114,9 @@ Map.addLayer(ipccClimateZones.neq(globalClimateZones(1985, 2015)).mask(ipccClima
 
 
 var gcz = globalClimateZones(1985, 2015).remap([1,2,3,4,5,6,7,8,9,10,11,12], [1,1,1,1,2,2,3,3,4,4,5,5])
-var ippCz = ipccClimateZones.remap([1,2,3,4,5,6,7,8,9,10,11,12], [1,1,1,1,2,2,3,3,4,4,5,5])
+var ipccCz = ipccClimateZones.remap([1,2,3,4,5,6,7,8,9,10,11,12], [1,1,1,1,2,2,3,3,4,4,5,5])
 
-Map.addLayer(ipccClimateZones.neq(gcz), {palette: ['ffffff', '00ff00']})
+Map.addLayer(ipccCz.neq(gcz).mask(ipccCz.neq(gcz)), {palette: ['ffffff', '00ff00']})
 
 
 

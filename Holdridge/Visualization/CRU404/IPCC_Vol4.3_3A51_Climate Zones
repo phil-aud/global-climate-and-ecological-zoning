@@ -183,11 +183,20 @@ for (var i = 0; i < 10; i++) {
 Map.add(createLegend());
 
 Export.image.toDrive({
-  image: gez2023(1991, 2020),
+  image: gez2023(1985, 2015),
   description: 'IPCC_404_ClimateZones_1985-2015',
   scale: 1000,
   fileFormat: 'GeoTIFF',
   maxPixels: 1e13
 });
+
+//var region = ee.Geometry.Rectangle([-180, -90, 180, 90]);
+Export.image.toAsset({
+  image: ipccClimateZones(1985, 2015),
+  description: 'GCZ/IPCC_IPCCClimateZones_1985-2015',
+  scale: 1000,
+  maxPixels: 1e13
+});
+
 
 

@@ -89,7 +89,6 @@ var cruPreMonthlyMean = function(image, startYear, endYear) {
 	return mmpre.monthlyMeanD(image, startYear, endYear);
 	};
 	
-//Map.addLayer(cruPreMonthlyMean(cruTsPre, 1991, 2015).sum(), {}, 'pre', 0);
 
 // Biotemperature
   var biotemperature = function(temperatureData, elevationData, startYear, endYear) {
@@ -226,9 +225,11 @@ var hlz = function (startYear, endYear) {
   // Desert, Desert Scrub, Thorn Woodland, Very Dry Forest, Dry Forest, Moist Forest, Wet Forest, Rain Forest
   
   // Mean annual precipitation
-  var map = cruPreMonthlyMean(cruTsPre, startYear, endYear).sum().rename('precipitation');
+  var map = cruPreMonthlyMean(cruTsPre, startYear, endYear).sum().rename('precipitation').unmask(0);
+
+/////////  var mapMask = cruPreMonthlyMean(cruTsPre, startYear, endYear).sum().rename('precipitation');
   // Potential Evapotranspiration Ratio (PET/MAP)
-  var petRatio = cruPetYearlyMean(cruTsPet, startYear, endYear).divide(map).rename('petRatio');
+  var petRatio = cruPetYearlyMean(cruTsPet, startYear, endYear).divide(map).rename('petRatio').unmask(0);
   
   // The authors decided not to use the centroid of the hexagons, but rather to impose the latitudinal regions as first criterion
   // and then use the circumcenter (mid-point) of the hypotenuse of the triangle biotemperature, precipitation and petRatio. 
@@ -238,9 +239,9 @@ var hlz = function (startYear, endYear) {
   // Inverting the formula gives the following: var n = nthTerm.divide(firstTerm).log().divide(commonRatio.log()).add(1);
   // where nthTerm is the pixelValue (e.g. 1500 for map), firstTerm is the first value of the geometric progression (e.g. 62.5 for map) and commonRatio which is a fixed, non-zero number for a geometric progression where each term in the sequence is twice the value of the previous term.
   // Example: A map value of 62.5 is the first value of the geometric progression and n would hence be 1. A map value of 125 is the second value of the geometric progression and has a value of 2. 
-  var nMap = ee.Image(map).divide(62.5).log().divide(ee.Number(2).log()).add(1).rename('nMap');
-  var nPetRatio = ee.Image(petRatio).divide(0.125).log().divide(ee.Number(2).log()).add(1);
-  
+  var nMap = ee.Image(map).divide(62.5).log().divide(ee.Number(2).log()).add(1).rename('nMap').unmask();
+  var nPetRatio = ee.Image(petRatio).divide(0.125).log().divide(ee.Number(2).log()).add(1).unmask();
+
   // To be able to easily calculate the circumcenter (mid-point) of the hypotenuse of the triangle biotemperature, map and petRatio (map and petRatio constitute the hypotenuse)
   // it is important to invert the order of the n values for petRatio. Since there are exactly nine values for the geometric progressions of both map and petRatio in Holdridge's Life Zone map, 
   // this can be done by using the following formula: (nMax + 1) - nPetRatio
@@ -252,13 +253,12 @@ var hlz = function (startYear, endYear) {
   };
   
   // IMPORTANT: If we invert the order of nPetRatio, we need to take into account the different max values of each of the latitudinal regions (or altitudinal belts)
-  var circumcenterHypotenuseTropical = getCircumcenterHypotenuse(32);
+  var circumcenterHypotenuseTropical = getCircumcenterHypotenuse(32).unmask();
   var circumcenterHypotenuseSubtropicalWarmTemperate = getCircumcenterHypotenuse(16);
   var circumcenterHypotenuseCoolTemperate = getCircumcenterHypotenuse(8);
   var circumcenterHypotenuseBoreal = getCircumcenterHypotenuse(4);
   var circumcenterHypotenuseSubpolar = getCircumcenterHypotenuse(2);
   var circumcenterHypotenusePolar = getCircumcenterHypotenuse(1);
-
 
   // Tropical
     // Tropical basal

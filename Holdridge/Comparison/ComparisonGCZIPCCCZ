@@ -109,14 +109,66 @@ Map.addLayer(globalClimateZones(1985, 2015).sldStyle(sld_intervals), {}, 'Global
 
 
 
-//Map.addLayer(ipccClimateZones.eq(globalClimateZones(1985, 2015)))
-Map.addLayer(ipccClimateZones.neq(globalClimateZones(1985, 2015)).mask(ipccClimateZones.neq(globalClimateZones(1985, 2015))), {palette: ['ffffff', 'ff0000']})
+var comparisonGCZIPCC = ipccClimateZones.neq(globalClimateZones(1985, 2015)).mask(ipccClimateZones.neq(globalClimateZones(1985, 2015)))
+Map.addLayer(comparisonGCZIPCC, {palette: ['ffffff', 'ff0000']})
 
 
 var gcz = globalClimateZones(1985, 2015).remap([1,2,3,4,5,6,7,8,9,10,11,12], [1,1,1,1,2,2,3,3,4,4,5,5])
 var ipccCz = ipccClimateZones.remap([1,2,3,4,5,6,7,8,9,10,11,12], [1,1,1,1,2,2,3,3,4,4,5,5])
 
-Map.addLayer(ipccCz.neq(gcz).mask(ipccCz.neq(gcz)), {palette: ['ffffff', '00ff00']})
+var comparisonLatRegions = ipccCz.neq(gcz).mask(ipccCz.neq(gcz))
+Map.addLayer(comparisonLatRegions, {palette: ['ffffff', '00ff00']})
+
+
+
+
+// Use the full global extent of the image
+var region = ee.Geometry.Rectangle([-180, -90, 180, 90]);
+
+// Count pixels equal to 1
+var count1 = comparisonLatRegions.eq(1).reduceRegion({
+  reducer: ee.Reducer.sum(),
+  geometry: region,
+  scale: 1000,           // adjust if your image has different resolution
+  maxPixels: 1e13
+});
+
+print(count1)
+
+// Count pixels equal to 0
+var count0 = comparisonLatRegions.eq(0).reduceRegion({
+  reducer: ee.Reducer.sum(),
+  geometry: region,
+  scale: 1000,
+  maxPixels: 1e13
+}).values().get(0);
+
+// Convert to ee.Number
+count1 = ee.Number(count1);
+count0 = ee.Number(count0);
+
+// Total valid pixels
+var total = count1.add(count0);
+
+// Percentages
+var pct1 = count1.divide(total).multiply(100);
+var pct0 = count0.divide(total).multiply(100);
+
+// Print results
+print('Pixels == 1 (count)', count1);
+print('Pixels == 0 (count)', count0);
+print('Total pixels', total);
+
+print('Pixels == 1 (%)', pct1);
+print('Pixels == 0 (%)', pct0);
+
+
+
+
+
+
+
+
 
 
 

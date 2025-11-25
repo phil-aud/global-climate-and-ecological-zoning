@@ -1,6 +1,6 @@
 /**** Start of imports. If edited, may not auto-convert in the playground. ****/
-var gcz19952024 = ee.Image("projects/ee-philaudebert/assets/GCZ/IPCC_GlobalClimateZones_1995-2024"),
-    gez19952024 = ee.Image("projects/ee-philaudebert/assets/GEZ/IPCC_GlobalEcologicalZones_1995-2024");
+var gcz19952024 = ee.Image("projects/ee-philaudebert/assets/GCZ/IPCC_GlobalClimateZones_1995-2024_CRU409"),
+    gez19952024 = ee.Image("projects/ee-philaudebert/assets/GEZ/IPCC_GlobalEcologicalZones_1995-2024_CRU409");
 /***** End of imports. If edited, may not auto-convert in the playground. *****/
 
 

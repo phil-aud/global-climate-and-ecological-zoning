@@ -1,13 +1,13 @@
 var ipccClimateZones = ee.Image("users/philipaudebert/IPCC/Corrigenda/ipcc_climate_1985-2015_corrigenda_raster");
 
 /////////////////////////////////////////////////////////////////////////////
-/////////////////////////// Holdridge Life Zones/////////////////////////////
+/////////////////////////// Global Climate Zones /////////////////////////////
 /////////////////////////////////////////////////////////////////////////////
  
-// Dataset used is CRU TS v. 4.07
+// Dataset used is CRU TS v. 4.00
 // We used the Holdridge Life Zone ecology classification from Holdridge 1967
 // https://reddcr.go.cr/sites/default/files/centro-de-documentacion/holdridge_1966_-_life_zone_ecology.pdf
-// Based on data from CRU TS 4.05
+// Based on data from CRU TS 4.00 to compare climate zones
 
 var hlz;
 
@@ -101,9 +101,7 @@ var sld_intervals =
   '</ColorMap>' +
 '</RasterSymbolizer>';
 
-//Map.addLayer(gez2023(1901, 1930).sldStyle(sld_intervals), {}, 'HLZ - Level1');
-//Map.addLayer(gez2023(1931, 1960).sldStyle(sld_intervals), {}, 'HLZ - Level1');
-//Map.addLayer(gez2023(1961, 1990).sldStyle(sld_intervals), {}, 'HLZ - Level1');
+
 Map.addLayer(ipccClimateZones.sldStyle(sld_intervals), {}, 'IPCC Climate Zones');
 Map.addLayer(globalClimateZones(1985, 2015).sldStyle(sld_intervals), {}, 'Global Climate Zones');
 

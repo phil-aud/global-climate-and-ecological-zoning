@@ -403,12 +403,11 @@ for (var i = 0; i < 37; i++) {
 }
 Map.add(createLegend());
 
-/*
+
 Export.image.toDrive({
-  image: holdridgeLifeZones(1991, 2020),
-  description: 'HLZ_level2',
+  image: holdridgeLifeZones(1995, 2024),
+  description: 'IPCC_HLZ_LVII_1995-2024',
   scale: 1000,
   fileFormat: 'GeoTIFF',
   maxPixels: 1e13
 });
-*/

@@ -283,15 +283,17 @@ Map.addLayer(holdridgeLifeZones(1991, 2020).randomVisualizer(), {}, 'Randomly Vi
 // print(holdridgeLifeZones(1991, 2020).projection())
 var transform = [0.00833333333333, 0, -180, 0, -0.00833333333333, 89.99999999994];
 
+
+/*
 Export.image.toAsset({
-  image: holdridgeLifeZones(1991, 2020), 
+  image: holdridgeLifeZones(1995, 2024), 
   description:"HLZLevel3", 
   crs: "EPSG:4326",
   crsTransform :transform,
   maxPixels: 9e9
 });
 
-/*
+
 Export.image.toAsset({
   image: holdridgeLifeZones(1986, 2015),
   description: 'FAO/GEZ/GEZ2023/hlz_level3_1986_2015',
@@ -299,4 +301,13 @@ Export.image.toAsset({
   maxPixels: 1e13
 });
 */
+
+Export.image.toDrive({
+  image: holdridgeLifeZones(1995, 2024),
+  description: 'IPCC_HLZ_LVIII_1995-2024',
+  scale: 1000,
+  fileFormat: 'GeoTIFF',
+  maxPixels: 1e13
+});
+
 

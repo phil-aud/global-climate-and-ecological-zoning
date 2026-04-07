@@ -200,6 +200,19 @@ var labelMap_gez = {
   71: 'Polar'
 };
 
+var labelMap_gcz = {
+  1: 'Tropical Wet',
+  2: 'Tropical Moist',
+  3: 'Tropical Dry',
+  4: 'Warm Temperate Moist',
+  5: 'Warm Temperate Dry',
+  6: 'Cool Temperate Moist',
+  7: 'Cool Temperate Dry',
+  8: 'Boreal Moist',
+  9: 'Boreal Dry',
+  10: 'Polar'
+};
+
 
 
 // Define an SLD style of discrete intervals to apply to the image.
@@ -380,14 +393,32 @@ var sld_intervals_gez =
   '</ColorMap>' +
 '</RasterSymbolizer>';
 
+// Define an SLD style of discrete intervals to apply to the image.
+var sld_intervals_gcz =
+'<RasterSymbolizer>' +
+  '<ColorMap type="intervals" extended="false">' +
+    '<ColorMapEntry color="#43896e" quantity="1" label="Tropical Wet"/>' +
+    '<ColorMapEntry color="#89ce65" quantity="2" label="Tropical Moist"/>' +
+    '<ColorMapEntry color="#f5f67a" quantity="3" label="Tropical Dry"/>' +
+    '<ColorMapEntry color="#72e0fe" quantity="4" label="Warm Temperate Moist"/>' +
+    '<ColorMapEntry color="#ffd381" quantity="5" label="Warm Temperate Dry"/>' +
+    '<ColorMapEntry color="#cef57a" quantity="6" label="Cool Temperate Moist"/>' +
+    '<ColorMapEntry color="#c29fd8" quantity="7" label="Cool Temperate Dry"/>' +
+    '<ColorMapEntry color="#9eaad7" quantity="8" label="Boreal Moist"/>' +
+    '<ColorMapEntry color="#d8d89f" quantity="9" label="Boreal Dry"/>' +
+    '<ColorMapEntry color="#d7ffe8" quantity="10" label="Polar"/>' +
+  '</ColorMap>' +
+'</RasterSymbolizer>';
+
 // Apply the SLD style to the hlzIII and hlzII layers
 var styled_hlzII = hlzIII.sldStyle(sld_intervals_hlzII);
 var styled_gez = gez.sldStyle(sld_intervals_gez);
+var styled_gcz = gcz.sldStyle(sld_intervals_gcz);
 
 // Add the styled layers to the map
 Map.addLayer(styled_hlzII, {}, 'Holdridge Life Zones - Level II');
-Map.addLayer(styled_gez, {}, 'Global Ecological Zones (Holdridge Life Zones - Level I)');
-
+Map.addLayer(styled_gez, {}, 'Global Ecological Zones (GEZ, Holdridge Life Zones - Level I)');
+Map.addLayer(styled_gcz, {}, 'Global Climate Zones (GCZ)');
 
 var panel = ui.Panel({
   style: {
@@ -417,6 +448,12 @@ clickLabel.style().set({
   textAlign: 'center', // Center the text
   width: '100%' // Make sure the label takes full width of the panel
 });
+var gcz_label = ui.Label('GCZ: ');
+gcz_label.style().set({
+  fontSize: '15px',
+  textAlign: 'center',
+  width: '100%'
+});
 var gez_label = ui.Label('GEZ (HLZ - Level I): ');
 gez_label.style().set({
   fontSize: '15px',
@@ -439,7 +476,7 @@ hlzIII_label.style().set({
   width: '100%' // Make sure the label takes full width of the panel
 });
 
-panel.add(startLabel).add(clickLabel).add(gez_label).add(hlzII_label).add(hlzIII_label);
+panel.add(startLabel).add(clickLabel).add(gcz_label).add(gez_label).add(hlzII_label).add(hlzIII_label);
 
 Map.add(panel);
 

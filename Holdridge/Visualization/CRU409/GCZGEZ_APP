@@ -2,7 +2,8 @@ var hlzIII = ee.Image("projects/ee-philaudebert/assets/HoldridgeLifeZones/HLZIII
 var hlzII = ee.Image("projects/ee-philaudebert/assets/HoldridgeLifeZones/HLZII_1995-2024_CRU409");
 var gez = ee.Image("projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GlobalEcologicalZones_HLZI_1995-2024_CRU409");
 var gcz = ee.Image("projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GlobalClimateZones_1995-2024_CRU409");
-
+Map.addLayer(hlzII)
+Map.addLayer(gez)
 
 var labelMap_hlzIII = {
   111: 'Tropical Rain Forest',

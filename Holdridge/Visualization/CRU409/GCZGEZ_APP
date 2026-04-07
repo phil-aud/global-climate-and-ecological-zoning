@@ -566,7 +566,7 @@ function updateLabel(coords) {
         var labelName_hlzIII = labelMap_hlzIII[value_hlzIII];
         
         gcz_label.setValue('GCZ: ' + labelName_gcz + ' (' + value_gcz + ')');
-        gez_label.setValue('HLZ - Level I: ' + labelName_gez + ' ('+ value_gez_adj + ')');
+        gez_label.setValue('GEZ (HLZ - Level I): ' + labelName_gez + ' ('+ value_gez_adj + ')');
         hlzII_label.setValue('HLZ - Level II: ' + labelName_hlzII + ' ('+ value_hlzII + ')');
         hlzIII_label.setValue('HLZ - Level III: ' + labelName_hlzIII + ' ('+ value_hlzIII + ')');
       });
@@ -593,7 +593,7 @@ function createLegend_GEZ() {
     var legend = ui.Panel({
     style: {
       maxHeight: '192px',
-      position: 'bottom-left',
+      position: 'bottom-right',
       padding: '8px 15px',
       border: '2px solid black' // Add a 2px solid black border
     }
@@ -601,7 +601,7 @@ function createLegend_GEZ() {
 
   // Create legend title
   var legendTitle_GEZ = ui.Label({
-    value: 'Holdridge Life Zones - Level I',
+    value: 'Global Ecological Zones',
     style: {
       fontWeight: 'bold',
       fontSize: '18px',
@@ -664,19 +664,19 @@ Map.add(createLegend_GEZ());
 
 //// Create Legend for HLZII
 
-function createLegendHLZII() {
+function createLegendGCZ() {
     var legend = ui.Panel({
     style: {
       maxHeight: '205px',
-      position: 'bottom-right',
+      position: 'bottom-left',
       padding: '8px 15px',
       border: '2px solid black' // Add a 2px solid black border
     }
   });
 
   // Create legend title
-  var legendTitleHLZII = ui.Label({
-    value: 'Holdridge Life Zones - Level II',
+  var legendTitleGCZ = ui.Label({
+    value: 'Global Climate Zones',
     style: {
       fontWeight: 'bold',
       fontSize: '18px',
@@ -686,7 +686,7 @@ function createLegendHLZII() {
   });
   
    // Add the title to the panel
-  legend.add(legendTitleHLZII); 
+  legend.add(legendTitleGCZ); 
 
   // Creates and styles 1 row of the legend.
   var makeRow = function(color, name) {
@@ -715,65 +715,39 @@ function createLegendHLZII() {
 };
 
 
-var palette_HLZII = [
-    'ce1d09','D2280D', 'DB4A2A', 'E36B49', 'EA8A68', 'F0A888', 'F6C3AA', 'FADDCC', // Tropical
-    'f19137', 'F3A052', 'F5AE6C', 'F7BD87', 'F9CCA2', 'FADABC', 'FCE9D7', // Subtropical
-    'ffde4a', 'FFE262', 'FFE77A', 'FFEB92', 'FFF0AB', 'FFF4C3', 'FFF8DB', // Warm Temperate
-    '9ec200', 'AECC29', 'BDD652', 'CDDF7A', 'DCE9A3', 'ECF3CC', // Cool Temperate
-    '009837', '33AD5F', '66C187', '99D6AF', 'CCEAD7', // Boreal
-    '00add6', '44C3E1', '88D9EC', 'CCEFF7', // Subpolar
-    '1451a0' // Polar
-  ];
+var palette_GCZ = [
+'43896e', // Tropical Wet
+'89ce65', // Tropical Moist
+'f5f67a', // Tropical Dry
+'72e0fe', // Warm Temperate Moist
+'ffd381', // Warm Temperate Dry
+'cef57a', // Cool Temperate Moist
+'c29fd8', // Cool Temperate Dry
+'9eaad7', // Boreal Moist
+'d8d89f', // Boreal Dry
+'d7ffe8'  // Polar
+];
 
 
-// name of the legend
-var names_HLZII = [ 
-"Tropical Rain Forest",
-"Tropical Wet Forest",
-"Tropical Moist Forest",
-"Tropical Dry Forest",
-"Tropical Very Dry Forest",
-"Tropical Thorn Woodland",
-"Tropical Desert Scrub",
-"Tropical Desert",
-"Subtropical Rain Forest",
-"Subtropical Wet Forest",
-"Subtropical Moist Forest",
-"Subtropical Dry Forest",
-"Subtropical Thorn Woodland",
-"Subtropical Desert Scrub",
-"Subtropical Desert",
-"Warm Temperate Rain Forest",
-"Warm Temperate Wet Forest",
-"Warm Temperate Moist Forest",
-"Warm Temperate Dry Forest",
-"Warm Temperate Thorn Woodland",
-"Warm Temperate Desert Scrub",
-"Warm Temperate Desert",
-"Cool Temperate Rain Forest",
-"Cool Temperate Wet Forest",
-"Cool Temperate Moist Forest",
-"Cool Temperate Steppe",
-"Cool Temperate Desert Scrub",
-"Cool Temperate Desert",
-"Boreal Rain Forest",
-"Boreal Wet Forest",
-"Boreal Moist Forest",
-"Boreal Dry Scrub",
-"Boreal Desert",
-"Subpolar Rain Tundra",
-"Subpolar Wet Tundra",
-"Subpolar Moist Tundra",
-"Subpolar Dry Tundra",
-"Polar",
-  ];
+var names_GCZ = [
+'Tropical Wet',
+'Tropical Moist',
+'Tropical Dry',
+'Warm Temperate Moist',
+'Warm Temperate Dry',
+'Cool Temperate Moist',
+'Cool Temperate Dry',
+'Boreal Moist',
+'Boreal Dry',
+'Polar'
+];
   
   // Add color and and names
-for (var i = 0; i < 38; i++) {
-  legend.add(makeRow(palette_HLZII[i], names_HLZII[i]));
+for (var i = 0; i < 10; i++) {
+  legend.add(makeRow(palette_GCZ[i], names_GCZ[i]));
   }  
   return legend;
 }
-Map.add(createLegendHLZII());
+Map.add(createLegendGCZ());
 
 Map.setCenter(10, 10, 2); // Set center over Europe and Africa

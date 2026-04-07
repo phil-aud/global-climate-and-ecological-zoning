@@ -211,7 +211,7 @@ Export.image.toDrive({
 */
 
 Export.image.toDrive({
-  image: holdridgeLifeZones(1995, 2024),
+  image: gez(1995, 2024),
   description: 'IPCC_GEZ_HLZ_LVI_1995-2024',
   scale: 1000,
   fileFormat: 'GeoTIFF',

@@ -485,9 +485,13 @@ Map.add(panel);
 
 function updateLabel(coords) {
   // Replace the label text with HLZ information
-  //label.setValue('HLZ I: [Value]\nHLZ II: [Value]\nHLZ III: [Value]');
   
   var point = ee.Geometry.Point(coords.lon, coords.lat);
+  
+  // --- GCZ (NEW) ---
+  gcz.reduceRegion(ee.Reducer.first(), point, 30).evaluate(function(result_gcz) {
+    var value_gcz = result_gcz['remapped'];
+    var labelName_gcz = labelMap_gcz[value_gcz];
   
   gez.reduceRegion(ee.Reducer.first(), point, 30).evaluate(function(result_gez) {
     var value_gez = result_gez['remapped'];
@@ -495,7 +499,6 @@ function updateLabel(coords) {
     
     var value_gez_adj = result_gez['remapped'];
   
-    // Corrected code with added else statement
     if (value_gez_adj === 11) {
       value_gez_adj = '1a';
     } else if (value_gez_adj === 12) {
@@ -554,7 +557,6 @@ function updateLabel(coords) {
       value_gez_adj = 'Unknown Value';
     }
 
-    
     hlzII.reduceRegion(ee.Reducer.first(), point, 30).evaluate(function(result_hlzII) {
       var value_hlzII = result_hlzII['remapped'];
       var labelName_hlzII = labelMap_hlzII[value_hlzII];
@@ -563,12 +565,14 @@ function updateLabel(coords) {
         var value_hlzIII = result_hlzIII['biotemperature'];
         var labelName_hlzIII = labelMap_hlzIII[value_hlzIII];
         
+        gcz_label.setValue('GCZ: ' + labelName_gcz + ' (' + value_gcz + ')');
         gez_label.setValue('HLZ - Level I: ' + labelName_gez + ' ('+ value_gez_adj + ')');
         hlzII_label.setValue('HLZ - Level II: ' + labelName_hlzII + ' ('+ value_hlzII + ')');
         hlzIII_label.setValue('HLZ - Level III: ' + labelName_hlzIII + ' ('+ value_hlzIII + ')');
       });
     });
   });
+});
 }
 
 Map.onClick(updateLabel);

@@ -218,3 +218,9 @@ Export.image.toDrive({
   maxPixels: 1e13
 });
 
+Export.image.toAsset({
+  image: holdridgeLifeZones(1995, 2024),
+  description: 'HoldridgeLifeZones/IPCC_GlobalEcologicalZones_HLZI_1995-2024_CRU409',
+  scale: 1000,
+  maxPixels: 1e13
+});

@@ -423,7 +423,7 @@ Map.addLayer(styled_gcz, {}, 'Global Climate Zones (GCZ)');
 var panel = ui.Panel({
   style: {
     position: 'bottom-center',
-    width: '500px',
+    width: '550px',
     padding: '12px',
     backgroundColor: 'white',
     border: '2px solid black'

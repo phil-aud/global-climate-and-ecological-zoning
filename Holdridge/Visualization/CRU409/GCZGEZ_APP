@@ -2,8 +2,7 @@ var hlzIII = ee.Image("projects/ee-philaudebert/assets/HoldridgeLifeZones/HLZIII
 var hlzII = ee.Image("projects/ee-philaudebert/assets/HoldridgeLifeZones/HLZII_1995-2024_CRU409");
 var gez = ee.Image("projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GlobalEcologicalZones_HLZI_1995-2024_CRU409");
 var gcz = ee.Image("projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GlobalClimateZones_1995-2024_CRU409");
-Map.addLayer(hlzII)
-Map.addLayer(gez)
+
 
 var labelMap_hlzIII = {
   111: 'Tropical Rain Forest',
@@ -424,60 +423,71 @@ Map.addLayer(styled_gcz, {}, 'Global Climate Zones (GCZ)');
 var panel = ui.Panel({
   style: {
     position: 'bottom-center',
-    backgroundColor: 'white',
     width: '500px',
-    height: '220px',
+    padding: '12px',
     backgroundColor: 'white',
-    padding: '8px',
-    fontSize: '20px',
-    border: '2px solid black' // Add a 2px solid black border
-    //fontWeight: 'bold'
+    border: '2px solid black'
   }
 });
 
+// Title
 var startLabel = ui.Label('Holdridge Life Zones (HLZ)');
 startLabel.style().set({
-  fontSize: '30px',
-  //fontWeight: 'bold',
-  textAlign: 'center', // Center the text
-  width: '100%' // Make sure the label takes full width of the panel
+  fontSize: '26px',
+  fontWeight: 'bold',
+  textAlign: 'center',
+  stretch: 'horizontal',   // ensures full width
+  margin: '0 0 8px 0'
 });
+
+// Instruction
 var clickLabel = ui.Label('--> Click on the map to get HLZ <--');
 clickLabel.style().set({
-  fontSize: '20px',
-  //fontWeight: 'bold',
-  textAlign: 'center', // Center the text
-  width: '100%' // Make sure the label takes full width of the panel
+  fontSize: '16px',
+  color: 'gray',
+  textAlign: 'center',
+  stretch: 'horizontal',   // ensures full width
+  margin: '0 0 12px 0'
 });
+
+// Data labels (left aligned for readability)
 var gcz_label = ui.Label('GCZ: ');
 gcz_label.style().set({
   fontSize: '15px',
-  textAlign: 'center',
-  width: '100%'
+  fontWeight: 'bold',
+  textAlign: 'left',
+  margin: '4px 0'
 });
+
 var gez_label = ui.Label('GEZ (HLZ - Level I): ');
 gez_label.style().set({
   fontSize: '15px',
-  //fontWeight: 'bold',
-  textAlign: 'center', // Center the text
-  width: '100%' // Make sure the label takes full width of the panel
+  fontWeight: 'bold',
+  textAlign: 'left',
+  margin: '4px 0'
 });
+
 var hlzII_label = ui.Label('HLZ - Level II: ');
 hlzII_label.style().set({
   fontSize: '15px',
-  //fontWeight: 'bold',
-  textAlign: 'center', // Center the text
-  width: '100%' // Make sure the label takes full width of the panel
+  textAlign: 'left',
+  margin: '4px 0'
 });
+
 var hlzIII_label = ui.Label('HLZ - Level III: ');
 hlzIII_label.style().set({
   fontSize: '15px',
-  //fontWeight: 'bold',
-  textAlign: 'center', // Center the text
-  width: '100%' // Make sure the label takes full width of the panel
+  textAlign: 'left',
+  margin: '4px 0'
 });
 
-panel.add(startLabel).add(clickLabel).add(gcz_label).add(gez_label).add(hlzII_label).add(hlzIII_label);
+// Add everything
+panel.add(startLabel)
+     .add(clickLabel)
+     .add(gcz_label)
+     .add(gez_label)
+     .add(hlzII_label)
+     .add(hlzIII_label);
 
 Map.add(panel);
 
@@ -667,7 +677,7 @@ Map.add(createLegend_GEZ());
 function createLegendGCZ() {
     var legend = ui.Panel({
     style: {
-      maxHeight: '205px',
+      maxHeight: '192px',
       position: 'bottom-left',
       padding: '8px 15px',
       border: '2px solid black' // Add a 2px solid black border
@@ -750,4 +760,4 @@ for (var i = 0; i < 10; i++) {
 }
 Map.add(createLegendGCZ());
 
-Map.setCenter(10, 10, 2); // Set center over Europe and Africa
+Map.setCenter(10, 10, 2); 

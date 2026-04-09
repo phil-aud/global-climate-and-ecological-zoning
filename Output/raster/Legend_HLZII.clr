@@ -1,0 +1,39 @@
+0 255 255 255 255 0
+11 206 29 9 255  Tropical rainforest
+12 206 29 9 255  Tropical wet forest
+13 213 59 42 255  Tropical moist forest
+14 219 89 75 255  Tropical dry forest
+15 226 119 107 255 Tropical very dry forest
+16 232 150 140 255 Tropical thorn woodland
+17 239 180 173 255 Tropical desert scrub
+18 245 210 206 255 Tropical desert
+21 241 145 55 255  Subtropical rain forest
+22 243 160 82 255  Subtropical wet forest
+23 245 174 108 255 Subtropical moist forest
+24 247 189 135 255 Subtropical dry forest
+25 249 204 162 255 Subtropical thorn woodland
+26 250 218 188 255 Subtropical desert scrub
+27 252 233 215 255 Subtropical desert
+31 255 222 74 255  Warm Temperate rain forest
+32 255 226 98 255  Warm Temperate wet forest
+33 255 231 122 255 Warm Temperate moist forest
+34 255 235 146 255 Warm Temperate dry forest
+35 255 240 171 255 Warm Temperate thorn woodland
+36 255 244 195 255 Warm Temperate desert scrub
+37 255 248 219 255 Warm Temperate desert
+41 158 194 0 255   Cool Temperate rain forest
+42 174 204 41 255  Cool Temperate wet forst
+43 189 214 82 255  Cool Temperate moist forest
+44 205 223 122 255 Cool Temperate steppe
+45 220 233 163 255 Cool Temperate desert scrub
+46 236 243 204 255 Cool Temperate desert
+51 0 152 55 255    Boreal rain forest
+52 51 173 95 255   Boreal wet forest
+53 102 193 135 255 Boreal moist forest
+54 153 214 175 255 Boreal dry scrub
+55 204 234 215 255 Boreal desert
+61 0 173 214 255   Subpolar rain tundra
+62 68 195 225 255  Subpolar wet tundra
+63 136 217 236 255 Subpolar moist tundra
+64 204 239 247 255 Subpolar desert
+71 20 81 160 255   Polar

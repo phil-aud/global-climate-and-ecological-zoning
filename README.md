@@ -329,7 +329,7 @@ var sld_intervals_levelIII =
 ## Source
 Audebert, P., Milne, E., Schiettecatte, LS. et al. Ecological zoning for climate policy and global change studies. Nat Sustain 7, 1294–1303 (2024). https://doi.org/10.1038/s41893-024-01416-5
 
-Audebert et al. (2026). Global Climate Zones. Under review. 
+Audebert et al. (2026). Aligning climate zoning to ecological zoning: A harmonized classification approach. Under review. https://www.researchsquare.com/article/rs-8843420/v1
 
 ## Metadata
 - File Format: GeoTIFF (.tif)

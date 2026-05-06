@@ -1,0 +1,609 @@
+/////////////////////////////////////////////////////////////////////////////
+/////////////////////////// Holdridge Life Zones/////////////////////////////
+/////////////////////////////////////////////////////////////////////////////
+
+// Dataset used is TerraClimate (IDAHO_EPSCOR/TERRACLIMATE)
+// We used the Holdridge Life Zone ecology classification from Holdridge 1967
+// https://reddcr.go.cr/sites/default/files/centro-de-documentacion/holdridge_1966_-_life_zone_ecology.pdf
+//
+// Band mapping from CRU to TerraClimate:
+//   CRU_pre  → TerraClimate 'pr'  (precipitation, mm/month, scale 1)
+//   CRU_pet  → TerraClimate 'pet' (reference evapotranspiration, mm/month, scale 0.1)
+//   CRU_tmp  → mean of TerraClimate 'tmmn' and 'tmmx' (min/max temperature, °C, scale 0.1)
+//
+// Frost line approximation:
+//   CRU uses frost days (frs) with threshold 0.5 days/year to distinguish Subtropical/Warm Temperate.
+//   TerraClimate has no frost days band. The frost line is approximated from monthly minimum
+//   temperature (tmmn × 0.1): a calendar month is "frosty" if its mean tmmn < 0°C.
+//   - Subtropical:    no calendar month has mean tmmn < 0°C (≈ CRU: frost days ≤ 0.5/year)
+//   - Warm Temperate: at least one calendar month has mean tmmn < 0°C (≈ CRU: frost days > 0.5/year)
+//
+// Note: TerraClimate is available from 1958 onward.
+//
+// Latitudinal regions (same thresholds as CRU409):
+//   A: Tropical        - sea-level biotemperature >= 24°C
+//   B: Subtropical     - 12°C <= biotemperature < 24°C & no frost month
+//   C: Warm Temperate  - 12°C <= biotemperature < 24°C & at least one frost month
+//   D: Cool Temperate  - 6°C  <= biotemperature < 12°C
+//   E: Boreal          - 3°C  <= biotemperature < 6°C
+//   F: Subpolar        - 1.5°C <= biotemperature < 3°C
+//   G: Polar           - 0°C  <= biotemperature < 1.5°C
+
+
+// =========================================================================
+// Dataset and elevation
+// =========================================================================
+
+var terraClimate = ee.ImageCollection("IDAHO_EPSCOR/TERRACLIMATE");
+var elevation    = ee.Image("USGS/GTOPO30");
+
+
+// =========================================================================
+// TerraClimate data processing helpers
+// =========================================================================
+
+// Monthly mean temperature: average of tmmn and tmmx (each scaled by 0.1 to get °C).
+// Returns an ImageCollection of 12 single-band images (Jan–Dec) where each image
+// is the mean temperature (°C) for that calendar month across the requested period.
+var tcMonthlyMeanTemp = function(startYear, endYear) {
+  var filtered = terraClimate
+    .filter(ee.Filter.calendarRange(startYear, endYear, 'year'))
+    .map(function(img) {
+      return img.select('tmmn').add(img.select('tmmx'))
+                .multiply(0.05)   // (tmmn + tmmx) / 2 × 0.1
+                .rename('tmp')
+                .copyProperties(img, ['system:time_start']);
+    });
+  var calendarMonths = ee.List.sequence(1, 12);
+  return ee.ImageCollection(calendarMonths.map(function(m) {
+    return filtered
+      .filter(ee.Filter.calendarRange(m, m, 'month'))
+      .mean()
+      .rename('tmp');
+  }));
+};
+
+// Monthly mean precipitation: pr in mm/month (scale factor 1, no conversion needed).
+// Returns an ImageCollection of 12 single-band images (Jan–Dec) where each image
+// is the mean precipitation (mm/month) for that calendar month across the requested period.
+var tcMonthlyMeanPre = function(startYear, endYear) {
+  var filtered = terraClimate
+    .filter(ee.Filter.calendarRange(startYear, endYear, 'year'))
+    .select('pr')
+    .map(function(img) {
+      return img.rename('pr').copyProperties(img, ['system:time_start']);
+    });
+  var calendarMonths = ee.List.sequence(1, 12);
+  return ee.ImageCollection(calendarMonths.map(function(m) {
+    return filtered
+      .filter(ee.Filter.calendarRange(m, m, 'month'))
+      .mean()
+      .rename('pr');
+  }));
+};
+
+// Annual mean PET: pet in mm/month (scale factor 0.1).
+// Returns a single-band image with the mean annual total PET (mm/year):
+// sum of 12 monthly mean PET values, each multiplied by 0.1.
+// (CRU pet was in mm/day and needed days/year; TerraClimate pet is already mm/month.)
+var tcAnnualMeanPet = function(startYear, endYear) {
+  var filtered = terraClimate
+    .filter(ee.Filter.calendarRange(startYear, endYear, 'year'))
+    .map(function(img) {
+      return img.select('pet').multiply(0.1).rename('pet')
+                .copyProperties(img, ['system:time_start']);
+    });
+  var calendarMonths = ee.List.sequence(1, 12);
+  var monthlyMeans = ee.ImageCollection(calendarMonths.map(function(m) {
+    return filtered
+      .filter(ee.Filter.calendarRange(m, m, 'month'))
+      .mean()
+      .rename('pet');
+  }));
+  return monthlyMeans.sum();  // sum of 12 monthly means = mean annual total PET (mm/year)
+};
+
+// Monthly mean minimum temperature: tmmn scaled by 0.1 to get °C.
+// Used to approximate the frost line (TerraClimate has no frost days band).
+// Returns an ImageCollection of 12 single-band images (Jan–Dec) where each image
+// is the mean minimum temperature (°C) for that calendar month across the requested period.
+var tcMonthlyMeanTmmn = function(startYear, endYear) {
+  var filtered = terraClimate
+    .filter(ee.Filter.calendarRange(startYear, endYear, 'year'))
+    .map(function(img) {
+      return img.select('tmmn').multiply(0.1).rename('tmmn')
+                .copyProperties(img, ['system:time_start']);
+    });
+  var calendarMonths = ee.List.sequence(1, 12);
+  return ee.ImageCollection(calendarMonths.map(function(m) {
+    return filtered
+      .filter(ee.Filter.calendarRange(m, m, 'month'))
+      .mean()
+      .rename('tmmn');
+  }));
+};
+
+
+// =========================================================================
+// Main HLZ classification function
+// =========================================================================
+
+var hlz = function(startYear, endYear) {
+
+  // -----------------------------------------------------------------------
+  // Precompute all climate data for the requested period
+  // -----------------------------------------------------------------------
+  var tcTemp   = tcMonthlyMeanTemp(startYear, endYear);   // 12-image IC, monthly mean temp (°C)
+  var tcPre    = tcMonthlyMeanPre(startYear, endYear);    // 12-image IC, monthly mean precip (mm)
+  var annualPet = tcAnnualMeanPet(startYear, endYear);    // single-band image, annual PET (mm/year)
+  var tcTmmn   = tcMonthlyMeanTmmn(startYear, endYear);   // 12-image IC, monthly mean tmmn (°C)
+
+  // -----------------------------------------------------------------------
+  // Biotemperature computation (Holdridge 1967 / Derguy et al. 2019)
+  // Monthly biotemperature (MMB): clip MMT to [0, 30] °C
+  //   MMB = 0   if MMT < 0°C
+  //   MMB = 30  if MMT > 30°C
+  //   MMB = MMT otherwise
+  // Mean annual biotemperature (MAB) = sum(MMB Jan..Dec) / 12
+  // Sea-level biotemperature (t0Bio) = MAB + (MAB > 0) × elevation_km × 6
+  // -----------------------------------------------------------------------
+  var tempBands = tcTemp.toBands();
+
+  var jan = (tempBands.select(0).gt(30).multiply(30)).add(tempBands.select(0).lte(30).multiply(tempBands.select(0).gt(0)).multiply(tempBands.select(0))).rename('biotemperature');
+  var feb = (tempBands.select(1).gt(30).multiply(30)).add(tempBands.select(1).lte(30).multiply(tempBands.select(1).gt(0)).multiply(tempBands.select(1))).rename('biotemperature');
+  var mar = (tempBands.select(2).gt(30).multiply(30)).add(tempBands.select(2).lte(30).multiply(tempBands.select(2).gt(0)).multiply(tempBands.select(2))).rename('biotemperature');
+  var apr = (tempBands.select(3).gt(30).multiply(30)).add(tempBands.select(3).lte(30).multiply(tempBands.select(3).gt(0)).multiply(tempBands.select(3))).rename('biotemperature');
+  var may = (tempBands.select(4).gt(30).multiply(30)).add(tempBands.select(4).lte(30).multiply(tempBands.select(4).gt(0)).multiply(tempBands.select(4))).rename('biotemperature');
+  var jun = (tempBands.select(5).gt(30).multiply(30)).add(tempBands.select(5).lte(30).multiply(tempBands.select(5).gt(0)).multiply(tempBands.select(5))).rename('biotemperature');
+  var jul = (tempBands.select(6).gt(30).multiply(30)).add(tempBands.select(6).lte(30).multiply(tempBands.select(6).gt(0)).multiply(tempBands.select(6))).rename('biotemperature');
+  var aug = (tempBands.select(7).gt(30).multiply(30)).add(tempBands.select(7).lte(30).multiply(tempBands.select(7).gt(0)).multiply(tempBands.select(7))).rename('biotemperature');
+  var sep = (tempBands.select(8).gt(30).multiply(30)).add(tempBands.select(8).lte(30).multiply(tempBands.select(8).gt(0)).multiply(tempBands.select(8))).rename('biotemperature');
+  var oct = (tempBands.select(9).gt(30).multiply(30)).add(tempBands.select(9).lte(30).multiply(tempBands.select(9).gt(0)).multiply(tempBands.select(9))).rename('biotemperature');
+  var nov = (tempBands.select(10).gt(30).multiply(30)).add(tempBands.select(10).lte(30).multiply(tempBands.select(10).gt(0)).multiply(tempBands.select(10))).rename('biotemperature');
+  var dec = (tempBands.select(11).gt(30).multiply(30)).add(tempBands.select(11).lte(30).multiply(tempBands.select(11).gt(0)).multiply(tempBands.select(11))).rename('biotemperature');
+
+  // Mean annual biotemperature
+  var tBio = ee.Image(ee.ImageCollection.fromImages([jan, feb, mar, apr, may, jun, jul, aug, sep, oct, nov, dec]).sum()).divide(12);
+
+  // Sea-level biotemperature: apply altitudinal lapse rate (+6°C per 1000 m of elevation)
+  // (lapse rate is only applied where tBio > 0 to avoid skewing cold regions)
+  var t0Bio = tBio.add(tBio.gt(0).multiply(elevation.divide(1000).multiply(6)));
+
+  // -----------------------------------------------------------------------
+  // Frost line approximation from TerraClimate tmmn
+  // frostMonthCount: number of calendar months (0–12) where mean tmmn < 0°C
+  // -----------------------------------------------------------------------
+  var tmmnBands = tcTmmn.toBands();
+  // Apply < 0 threshold to each of the 12 bands, then sum across bands
+  var frostMonthCount = tmmnBands.lt(0).reduce(ee.Reducer.sum());
+
+  // -----------------------------------------------------------------------
+  // A: Tropical — sea-level biotemperature >= 24°C
+  // -----------------------------------------------------------------------
+  var tropical = t0Bio.gte(24);
+
+  // -----------------------------------------------------------------------
+  // B: Subtropical — 12°C <= biotemperature < 24°C, no frost month
+  // -----------------------------------------------------------------------
+  var t0Bio_sub  = t0Bio.multiply(frostMonthCount.lte(0));    // zero-out where frost occurs
+  var subtropical = t0Bio_sub.gte(12).multiply(t0Bio_sub.lt(24));
+
+  // -----------------------------------------------------------------------
+  // C: Warm Temperate — 12°C <= biotemperature < 24°C, at least one frost month
+  // -----------------------------------------------------------------------
+  var t0Bio_wt    = t0Bio.multiply(frostMonthCount.gt(0));    // zero-out where no frost
+  var warmTemperate = t0Bio_wt.gte(12).multiply(t0Bio_wt.lt(24));
+
+  // -----------------------------------------------------------------------
+  // D: Cool Temperate — 6°C <= biotemperature < 12°C
+  // -----------------------------------------------------------------------
+  var coolTemperate = t0Bio.gte(6).multiply(t0Bio.lt(12));
+
+  // -----------------------------------------------------------------------
+  // E: Boreal — 3°C <= biotemperature < 6°C
+  // -----------------------------------------------------------------------
+  var boreal = t0Bio.gte(3).multiply(t0Bio.lt(6));
+
+  // -----------------------------------------------------------------------
+  // F: Subpolar — 1.5°C <= biotemperature < 3°C
+  // -----------------------------------------------------------------------
+  var subpolar = t0Bio.gte(1.5).multiply(t0Bio.lt(3));
+
+  // -----------------------------------------------------------------------
+  // G: Polar — 0°C <= biotemperature < 1.5°C
+  // -----------------------------------------------------------------------
+  var polar = t0Bio.gte(0).multiply(t0Bio.lt(1.5));
+
+
+  // =========================================================================
+  // Altitudinal belts (identical to CRU409 — elevation thresholds unchanged)
+  // =========================================================================
+
+  // Tropical altitudinal belts
+  var tropicalBasal       = tropical.multiply(elevation.lte(1000));
+  var tropicalPremontane  = tropical.multiply(elevation.lte(2000).multiply(elevation.gt(1000)));
+  var tropicalLowerMontane= tropical.multiply(elevation.lte(3000).multiply(elevation.gt(2000)));
+  var tropicalMontane     = tropical.multiply(elevation.lte(4000).multiply(elevation.gt(3000)));
+  var tropicalSubalpine   = tropical.multiply(elevation.lte(4500).multiply(elevation.gt(4000)));
+  var tropicalAlpine      = tropical.multiply(elevation.lte(4750).multiply(elevation.gt(4500)));
+  var tropicalNival       = tropical.multiply(elevation.gt(4750));
+
+  // Subtropical altitudinal belts
+  var subtropicalPremontane  = subtropical.multiply(elevation.lte(1000));
+  var subtropicalLowerMontane= subtropical.multiply(elevation.lte(2000).multiply(elevation.gt(1000)));
+  var subtropicalMontane     = subtropical.multiply(elevation.lte(3000).multiply(elevation.gt(2000)));
+  var subtropicalSubalpine   = subtropical.multiply(elevation.lte(3500).multiply(elevation.gt(3000)));
+  var subtropicalAlpine      = subtropical.multiply(elevation.lte(3750).multiply(elevation.gt(3500)));
+  var subtropicalNival       = subtropical.multiply(elevation.gt(3750));
+
+  // Warm Temperate altitudinal belts
+  var warmTemperateLowerMontane= warmTemperate.multiply(elevation.lte(1000));
+  var warmTemperateMontane     = warmTemperate.multiply(elevation.lte(2000).multiply(elevation.gt(1000)));
+  var warmTemperateSubalpine   = warmTemperate.multiply(elevation.lte(2500).multiply(elevation.gt(2000)));
+  var warmTemperateAlpine      = warmTemperate.multiply(elevation.lte(2750).multiply(elevation.gt(2500)));
+  var warmTemperateNival       = warmTemperate.multiply(elevation.gt(2750));
+
+  // Cool Temperate altitudinal belts
+  var coolTemperateMontane  = coolTemperate.multiply(elevation.lte(1000));
+  var coolTemperateSubalpine= coolTemperate.multiply(elevation.lte(1500).multiply(elevation.gt(1000)));
+  var coolTemperateAlpine   = coolTemperate.multiply(elevation.lte(1750).multiply(elevation.gt(1500)));
+  var coolTemperateNival    = coolTemperate.multiply(elevation.gt(1750));
+
+  // Boreal altitudinal belts
+  var borealSubalpine = boreal.multiply(elevation.lte(500));
+  var borealAlpine    = boreal.multiply(elevation.lte(750).multiply(elevation.gt(500)));
+  var borealNival     = boreal.multiply(elevation.gt(750));
+
+  // Subpolar altitudinal belts
+  var subpolarAlpine = subpolar.multiply(elevation.lte(250));
+  var subpolarNival  = subpolar.multiply(elevation.gt(250));
+
+  // Polar
+  var polarNival = polar;
+
+
+  // =========================================================================
+  // Precipitation thresholds (circumcenter-of-hypotenuse method — identical to CRU409)
+  // =========================================================================
+
+  // Mean annual precipitation (MAP) from TerraClimate monthly means
+  var map = tcPre.sum().rename('precipitation');
+
+  // Annual PET ratio (PET/MAP) — dimensionless
+  var petRatio = annualPet.divide(map).rename('petRatio');
+
+  // Logarithmic (geometric) position along the precipitation axis
+  var nMap = ee.Image(map).divide(62.5).log().divide(ee.Number(2).log()).add(1).rename('nMap');
+  var nPetRatio = ee.Image(petRatio).divide(0.125).log().divide(ee.Number(2).log()).add(1);
+
+  // Circumcenter of the hypotenuse (midpoint of MAP–PET axes), inverted for PET
+  var getCircumcenterHypotenuse = function(petRatioMax) {
+    var nMax = ee.Image(petRatioMax).divide(0.125).log().divide(ee.Image(2).log()).add(1).add(1);
+    var nPetRatioInverted = nMax.subtract(nPetRatio).rename('nPetRatioInverted');
+    var circumcenterHypotenuse = (nMap.add(nPetRatioInverted)).divide(2).rename('circumcenterHypotenuse');
+    return circumcenterHypotenuse;
+  };
+
+  // Circumcenter values per latitudinal belt (max petRatio differs by region)
+  var circumcenterHypotenuseTropical              = getCircumcenterHypotenuse(32);
+  var circumcenterHypotenuseSubtropicalWarmTemperate = getCircumcenterHypotenuse(16);
+  var circumcenterHypotenuseCoolTemperate         = getCircumcenterHypotenuse(8);
+  var circumcenterHypotenuseBoreal                = getCircumcenterHypotenuse(4);
+  var circumcenterHypotenuseSubpolar              = getCircumcenterHypotenuse(2);
+  var circumcenterHypotenusePolar                 = getCircumcenterHypotenuse(1);
+
+
+  // =========================================================================
+  // Life zone assignments (identical to CRU409)
+  // =========================================================================
+
+  // ----- Tropical -----
+    // Tropical Basal
+    var tropicalBasalDesert          = tropicalBasal.multiply(circumcenterHypotenuseTropical.lte(2));
+    var tropicalBasalDesertScrub     = tropicalBasal.multiply(circumcenterHypotenuseTropical.gt(2).multiply(circumcenterHypotenuseTropical.lte(3)));
+    var tropicalBasalThornWoodland   = tropicalBasal.multiply(circumcenterHypotenuseTropical.gt(3).multiply(circumcenterHypotenuseTropical.lte(4)));
+    var tropicalBasalVeryDryForest   = tropicalBasal.multiply(circumcenterHypotenuseTropical.gt(4).multiply(circumcenterHypotenuseTropical.lte(5)));
+    var tropicalBasalDryForest       = tropicalBasal.multiply(circumcenterHypotenuseTropical.gt(5).multiply(circumcenterHypotenuseTropical.lte(6)));
+    var tropicalBasalMoistForest     = tropicalBasal.multiply(circumcenterHypotenuseTropical.gt(6).multiply(circumcenterHypotenuseTropical.lte(7)));
+    var tropicalBasalWetForest       = tropicalBasal.multiply(circumcenterHypotenuseTropical.gt(7).multiply(circumcenterHypotenuseTropical.lte(8)));
+    var tropicalBasalRainforest      = tropicalBasal.multiply(circumcenterHypotenuseTropical.gt(8));
+    // Tropical Premontane
+    var tropicalPremontaneDesert        = tropicalPremontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(2));
+    var tropicalPremontaneDesertScrub   = tropicalPremontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(2).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(3)));
+    var tropicalPremontaneThornWoodland = tropicalPremontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(3).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(4)));
+    var tropicalPremontaneDryForest     = tropicalPremontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(4).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(5)));
+    var tropicalPremontaneMoistForest   = tropicalPremontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(5).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(6)));
+    var tropicalPremontaneWetForest     = tropicalPremontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(6).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(7)));
+    var tropicalPremontaneRainForest    = tropicalPremontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(7));
+    // Tropical Lower Montane
+    var tropicalLowerMontaneDesert        = tropicalLowerMontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(2));
+    var tropicalLowerMontaneDesertScrub   = tropicalLowerMontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(2).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(3)));
+    var tropicalLowerMontaneThornWoodland = tropicalLowerMontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(3).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(4)));
+    var tropicalLowerMontaneDryForest     = tropicalLowerMontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(4).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(5)));
+    var tropicalLowerMontaneMoistForest   = tropicalLowerMontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(5).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(6)));
+    var tropicalLowerMontaneWetForest     = tropicalLowerMontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(6).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(7)));
+    var tropicalLowerMontaneRainForest    = tropicalLowerMontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(7));
+    // Tropical Montane
+    var tropicalMontaneDesert      = tropicalMontane.multiply(circumcenterHypotenuseCoolTemperate.lte(2));
+    var tropicalMontaneDesertScrub = tropicalMontane.multiply(circumcenterHypotenuseCoolTemperate.gt(2).multiply(circumcenterHypotenuseCoolTemperate.lte(3)));
+    var tropicalMontaneSteppe      = tropicalMontane.multiply(circumcenterHypotenuseCoolTemperate.gt(3).multiply(circumcenterHypotenuseCoolTemperate.lte(4)));
+    var tropicalMontaneMoistForest = tropicalMontane.multiply(circumcenterHypotenuseCoolTemperate.gt(4).multiply(circumcenterHypotenuseCoolTemperate.lte(5)));
+    var tropicalMontaneWetForest   = tropicalMontane.multiply(circumcenterHypotenuseCoolTemperate.gt(5).multiply(circumcenterHypotenuseCoolTemperate.lte(6)));
+    var tropicalMontaneRainForest  = tropicalMontane.multiply(circumcenterHypotenuseCoolTemperate.gt(6));
+    // Tropical Subalpine
+    var tropicalSubalpineDesert     = tropicalSubalpine.multiply(circumcenterHypotenuseBoreal.lte(2));
+    var tropicalSubalpineDryScrub   = tropicalSubalpine.multiply(circumcenterHypotenuseBoreal.gt(2).multiply(circumcenterHypotenuseBoreal.lte(3)));
+    var tropicalSubalpineMoistForest= tropicalSubalpine.multiply(circumcenterHypotenuseBoreal.gt(3).multiply(circumcenterHypotenuseBoreal.lte(4)));
+    var tropicalSubalpineWetForest  = tropicalSubalpine.multiply(circumcenterHypotenuseBoreal.gt(4).multiply(circumcenterHypotenuseBoreal.lte(5)));
+    var tropicalSubalpineRainForest = tropicalSubalpine.multiply(circumcenterHypotenuseBoreal.gt(5));
+    // Tropical Alpine
+    var tropicalAlpineDryTundra  = tropicalAlpine.multiply(circumcenterHypotenuseSubpolar.lte(2));
+    var tropicalAlpineMoistTundra= tropicalAlpine.multiply(circumcenterHypotenuseSubpolar.gt(2).multiply(circumcenterHypotenuseSubpolar.lte(3)));
+    var tropicalAlpineWetTundra  = tropicalAlpine.multiply(circumcenterHypotenuseSubpolar.gt(3).multiply(circumcenterHypotenuseSubpolar.lte(4)));
+    var tropicalAlpineRainTundra = tropicalAlpine.multiply(circumcenterHypotenuseSubpolar.gt(4));
+    // Tropical Nival
+    var tropicalNivalDesert = tropicalNival;
+
+  // ----- Subtropical -----
+    // Subtropical Premontane
+    var subtropicalPremontaneDesert        = subtropicalPremontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(2));
+    var subtropicalPremontaneDesertScrub   = subtropicalPremontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(2).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(3)));
+    var subtropicalPremontaneThornWoodland = subtropicalPremontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(3).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(4)));
+    var subtropicalPremontaneDryForest     = subtropicalPremontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(4).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(5)));
+    var subtropicalPremontaneMoistForest   = subtropicalPremontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(5).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(6)));
+    var subtropicalPremontaneWetForest     = subtropicalPremontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(6).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(7)));
+    var subtropicalPremontaneRainForest    = subtropicalPremontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(7));
+    // Subtropical Lower Montane
+    var subtropicalLowerMontaneDesert        = subtropicalLowerMontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(2));
+    var subtropicalLowerMontaneDesertScrub   = subtropicalLowerMontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(2).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(3)));
+    var subtropicalLowerMontaneThornWoodland = subtropicalLowerMontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(3).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(4)));
+    var subtropicalLowerMontaneDryForest     = subtropicalLowerMontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(4).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(5)));
+    var subtropicalLowerMontaneMoistForest   = subtropicalLowerMontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(5).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(6)));
+    var subtropicalLowerMontaneWetForest     = subtropicalLowerMontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(6).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(7)));
+    var subtropicalLowerMontaneRainForest    = subtropicalLowerMontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(7));
+    // Subtropical Montane
+    var subtropicalMontaneDesert      = subtropicalMontane.multiply(circumcenterHypotenuseCoolTemperate.lte(2));
+    var subtropicalMontaneDesertScrub = subtropicalMontane.multiply(circumcenterHypotenuseCoolTemperate.gt(2).multiply(circumcenterHypotenuseCoolTemperate.lte(3)));
+    var subtropicalMontaneSteppe      = subtropicalMontane.multiply(circumcenterHypotenuseCoolTemperate.gt(3).multiply(circumcenterHypotenuseCoolTemperate.lte(4)));
+    var subtropicalMontaneMoistForest = subtropicalMontane.multiply(circumcenterHypotenuseCoolTemperate.gt(4).multiply(circumcenterHypotenuseCoolTemperate.lte(5)));
+    var subtropicalMontaneWetForest   = subtropicalMontane.multiply(circumcenterHypotenuseCoolTemperate.gt(5).multiply(circumcenterHypotenuseCoolTemperate.lte(6)));
+    var subtropicalMontaneRainForest  = subtropicalMontane.multiply(circumcenterHypotenuseCoolTemperate.gt(6));
+    // Subtropical Subalpine
+    var subtropicalSubalpineDesert     = subtropicalSubalpine.multiply(circumcenterHypotenuseBoreal.lte(2));
+    var subtropicalSubalpineDryScrub   = subtropicalSubalpine.multiply(circumcenterHypotenuseBoreal.gt(2).multiply(circumcenterHypotenuseBoreal.lte(3)));
+    var subtropicalSubalpineMoistForest= subtropicalSubalpine.multiply(circumcenterHypotenuseBoreal.gt(3).multiply(circumcenterHypotenuseBoreal.lte(4)));
+    var subtropicalSubalpineWetForest  = subtropicalSubalpine.multiply(circumcenterHypotenuseBoreal.gt(4).multiply(circumcenterHypotenuseBoreal.lte(5)));
+    var subtropicalSubalpineRainForest = subtropicalSubalpine.multiply(circumcenterHypotenuseBoreal.gt(5));
+    // Subtropical Alpine
+    var subtropicalAlpineDryTundra  = subtropicalAlpine.multiply(circumcenterHypotenuseSubpolar.lte(2));
+    var subtropicalAlpineMoistTundra= subtropicalAlpine.multiply(circumcenterHypotenuseSubpolar.gt(2).multiply(circumcenterHypotenuseSubpolar.lte(3)));
+    var subtropicalAlpineWetTundra  = subtropicalAlpine.multiply(circumcenterHypotenuseSubpolar.gt(3).multiply(circumcenterHypotenuseSubpolar.lte(4)));
+    var subtropicalAlpineRainTundra = subtropicalAlpine.multiply(circumcenterHypotenuseSubpolar.gt(4));
+    // Subtropical Nival
+    var subtropicalNivalDesert = subtropicalNival;
+
+  // ----- Warm Temperate -----
+    // Warm Temperate Lower Montane
+    var warmTemperateLowerMontaneDesert        = warmTemperateLowerMontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(2));
+    var warmTemperateLowerMontaneDesertScrub   = warmTemperateLowerMontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(2).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(3)));
+    var warmTemperateLowerMontaneThornWoodland = warmTemperateLowerMontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(3).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(4)));
+    var warmTemperateLowerMontaneDryForest     = warmTemperateLowerMontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(4).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(5)));
+    var warmTemperateLowerMontaneMoistForest   = warmTemperateLowerMontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(5).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(6)));
+    var warmTemperateLowerMontaneWetForest     = warmTemperateLowerMontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(6).multiply(circumcenterHypotenuseSubtropicalWarmTemperate.lte(7)));
+    var warmTemperateLowerMontaneRainForest    = warmTemperateLowerMontane.multiply(circumcenterHypotenuseSubtropicalWarmTemperate.gt(7));
+    // Warm Temperate Montane
+    var warmTemperateMontaneDesert      = warmTemperateMontane.multiply(circumcenterHypotenuseCoolTemperate.lte(2));
+    var warmTemperateMontaneDesertScrub = warmTemperateMontane.multiply(circumcenterHypotenuseCoolTemperate.gt(2).multiply(circumcenterHypotenuseCoolTemperate.lte(3)));
+    var warmTemperateMontaneSteppe      = warmTemperateMontane.multiply(circumcenterHypotenuseCoolTemperate.gt(3).multiply(circumcenterHypotenuseCoolTemperate.lte(4)));
+    var warmTemperateMontaneMoistForest = warmTemperateMontane.multiply(circumcenterHypotenuseCoolTemperate.gt(4).multiply(circumcenterHypotenuseCoolTemperate.lte(5)));
+    var warmTemperateMontaneWetForest   = warmTemperateMontane.multiply(circumcenterHypotenuseCoolTemperate.gt(5).multiply(circumcenterHypotenuseCoolTemperate.lte(6)));
+    var warmTemperateMontaneRainForest  = warmTemperateMontane.multiply(circumcenterHypotenuseCoolTemperate.gt(6));
+    // Warm Temperate Subalpine
+    var warmTemperateSubalpineDesert     = warmTemperateSubalpine.multiply(circumcenterHypotenuseBoreal.lte(2));
+    var warmTemperateSubalpineDryScrub   = warmTemperateSubalpine.multiply(circumcenterHypotenuseBoreal.gt(2).multiply(circumcenterHypotenuseBoreal.lte(3)));
+    var warmTemperateSubalpineMoistForest= warmTemperateSubalpine.multiply(circumcenterHypotenuseBoreal.gt(3).multiply(circumcenterHypotenuseBoreal.lte(4)));
+    var warmTemperateSubalpineWetForest  = warmTemperateSubalpine.multiply(circumcenterHypotenuseBoreal.gt(4).multiply(circumcenterHypotenuseBoreal.lte(5)));
+    var warmTemperateSubalpineRainForest = warmTemperateSubalpine.multiply(circumcenterHypotenuseBoreal.gt(5));
+    // Warm Temperate Alpine
+    var warmTemperateAlpineDryTundra  = warmTemperateAlpine.multiply(circumcenterHypotenuseSubpolar.lte(2));
+    var warmTemperateAlpineMoistTundra= warmTemperateAlpine.multiply(circumcenterHypotenuseSubpolar.gt(2).multiply(circumcenterHypotenuseSubpolar.lte(3)));
+    var warmTemperateAlpineWetTundra  = warmTemperateAlpine.multiply(circumcenterHypotenuseSubpolar.gt(3).multiply(circumcenterHypotenuseSubpolar.lte(4)));
+    var warmTemperateAlpineRainTundra = warmTemperateAlpine.multiply(circumcenterHypotenuseSubpolar.gt(4));
+    // Warm Temperate Nival
+    var warmTemperateNivalDesert = warmTemperateNival;
+
+  // ----- Cool Temperate -----
+    // Cool Temperate Montane
+    var coolTemperateMontaneDesert      = coolTemperateMontane.multiply(circumcenterHypotenuseCoolTemperate.lte(2));
+    var coolTemperateMontaneDesertScrub = coolTemperateMontane.multiply(circumcenterHypotenuseCoolTemperate.gt(2).multiply(circumcenterHypotenuseCoolTemperate.lte(3)));
+    var coolTemperateMontaneSteppe      = coolTemperateMontane.multiply(circumcenterHypotenuseCoolTemperate.gt(3).multiply(circumcenterHypotenuseCoolTemperate.lte(4)));
+    var coolTemperateMontaneMoistForest = coolTemperateMontane.multiply(circumcenterHypotenuseCoolTemperate.gt(4).multiply(circumcenterHypotenuseCoolTemperate.lte(5)));
+    var coolTemperateMontaneWetForest   = coolTemperateMontane.multiply(circumcenterHypotenuseCoolTemperate.gt(5).multiply(circumcenterHypotenuseCoolTemperate.lte(6)));
+    var coolTemperateMontaneRainForest  = coolTemperateMontane.multiply(circumcenterHypotenuseCoolTemperate.gt(6));
+    // Cool Temperate Subalpine
+    var coolTemperateSubalpineDesert     = coolTemperateSubalpine.multiply(circumcenterHypotenuseBoreal.lte(2));
+    var coolTemperateSubalpineDryScrub   = coolTemperateSubalpine.multiply(circumcenterHypotenuseBoreal.gt(2).multiply(circumcenterHypotenuseBoreal.lte(3)));
+    var coolTemperateSubalpineMoistForest= coolTemperateSubalpine.multiply(circumcenterHypotenuseBoreal.gt(3).multiply(circumcenterHypotenuseBoreal.lte(4)));
+    var coolTemperateSubalpineWetForest  = coolTemperateSubalpine.multiply(circumcenterHypotenuseBoreal.gt(4).multiply(circumcenterHypotenuseBoreal.lte(5)));
+    var coolTemperateSubalpineRainForest = coolTemperateSubalpine.multiply(circumcenterHypotenuseBoreal.gt(5));
+    // Cool Temperate Alpine
+    var coolTemperateAlpineDryTundra  = coolTemperateAlpine.multiply(circumcenterHypotenuseSubpolar.lte(2));
+    var coolTemperateAlpineMoistTundra= coolTemperateAlpine.multiply(circumcenterHypotenuseSubpolar.gt(2).multiply(circumcenterHypotenuseSubpolar.lte(3)));
+    var coolTemperateAlpineWetTundra  = coolTemperateAlpine.multiply(circumcenterHypotenuseSubpolar.gt(3).multiply(circumcenterHypotenuseSubpolar.lte(4)));
+    var coolTemperateAlpineRainTundra = coolTemperateAlpine.multiply(circumcenterHypotenuseSubpolar.gt(4));
+    // Cool Temperate Nival
+    var coolTemperateNivalDesert = coolTemperateNival;
+
+  // ----- Boreal -----
+    // Boreal Subalpine
+    var borealSubalpineDesert     = borealSubalpine.multiply(circumcenterHypotenuseBoreal.lte(2));
+    var borealSubalpineDryScrub   = borealSubalpine.multiply(circumcenterHypotenuseBoreal.gt(2).multiply(circumcenterHypotenuseBoreal.lte(3)));
+    var borealSubalpineMoistForest= borealSubalpine.multiply(circumcenterHypotenuseBoreal.gt(3).multiply(circumcenterHypotenuseBoreal.lte(4)));
+    var borealSubalpineWetForest  = borealSubalpine.multiply(circumcenterHypotenuseBoreal.gt(4).multiply(circumcenterHypotenuseBoreal.lte(5)));
+    var borealSubalpineRainForest = borealSubalpine.multiply(circumcenterHypotenuseBoreal.gt(5));
+    // Boreal Alpine
+    var borealAlpineDryTundra  = borealAlpine.multiply(circumcenterHypotenuseSubpolar.lte(2));
+    var borealAlpineMoistTundra= borealAlpine.multiply(circumcenterHypotenuseSubpolar.gt(2).multiply(circumcenterHypotenuseSubpolar.lte(3)));
+    var borealAlpineWetTundra  = borealAlpine.multiply(circumcenterHypotenuseSubpolar.gt(3).multiply(circumcenterHypotenuseSubpolar.lte(4)));
+    var borealAlpineRainTundra = borealAlpine.multiply(circumcenterHypotenuseSubpolar.gt(4));
+    // Boreal Nival
+    var borealNivalDesert = borealNival;
+
+  // ----- Subpolar -----
+    // Subpolar Alpine
+    var subpolarAlpineDryTundra  = subpolarAlpine.multiply(circumcenterHypotenuseSubpolar.lte(2));
+    var subpolarAlpineMoistTundra= subpolarAlpine.multiply(circumcenterHypotenuseSubpolar.gt(2).multiply(circumcenterHypotenuseSubpolar.lte(3)));
+    var subpolarAlpineWetTundra  = subpolarAlpine.multiply(circumcenterHypotenuseSubpolar.gt(3).multiply(circumcenterHypotenuseSubpolar.lte(4)));
+    var subpolarAlpineRainTundra = subpolarAlpine.multiply(circumcenterHypotenuseSubpolar.gt(4));
+    // Subpolar Nival
+    var subpolarNivalDesert = subpolarNival;
+
+  // ----- Polar -----
+    var polarNivalDesert = polarNival;
+
+
+  // =========================================================================
+  // Assemble life zone map (3-digit codes identical to CRU409)
+  // =========================================================================
+
+  var lifeZones =
+    // --- Tropical ---
+      tropicalBasalRainforest.multiply(111)
+      .add(tropicalBasalWetForest.multiply(112))
+      .add(tropicalBasalMoistForest.multiply(113))
+      .add(tropicalBasalDryForest.multiply(114))
+      .add(tropicalBasalVeryDryForest.multiply(115))
+      .add(tropicalBasalThornWoodland.multiply(116))
+      .add(tropicalBasalDesertScrub.multiply(117))
+      .add(tropicalBasalDesert.multiply(118))
+      .add(tropicalPremontaneRainForest.multiply(121))
+      .add(tropicalPremontaneWetForest.multiply(122))
+      .add(tropicalPremontaneMoistForest.multiply(123))
+      .add(tropicalPremontaneDryForest.multiply(124))
+      .add(tropicalPremontaneThornWoodland.multiply(125))
+      .add(tropicalPremontaneDesertScrub.multiply(126))
+      .add(tropicalPremontaneDesert.multiply(127))
+      .add(tropicalLowerMontaneRainForest.multiply(131))
+      .add(tropicalLowerMontaneWetForest.multiply(132))
+      .add(tropicalLowerMontaneMoistForest.multiply(133))
+      .add(tropicalLowerMontaneDryForest.multiply(134))
+      .add(tropicalLowerMontaneThornWoodland.multiply(135))
+      .add(tropicalLowerMontaneDesertScrub.multiply(136))
+      .add(tropicalLowerMontaneDesert.multiply(137))
+      .add(tropicalMontaneRainForest.multiply(141))
+      .add(tropicalMontaneWetForest.multiply(142))
+      .add(tropicalMontaneMoistForest.multiply(143))
+      .add(tropicalMontaneSteppe.multiply(144))
+      .add(tropicalMontaneDesertScrub.multiply(145))
+      .add(tropicalMontaneDesert.multiply(146))
+      .add(tropicalSubalpineRainForest.multiply(151))
+      .add(tropicalSubalpineWetForest.multiply(152))
+      .add(tropicalSubalpineMoistForest.multiply(153))
+      .add(tropicalSubalpineDryScrub.multiply(154))
+      .add(tropicalSubalpineDesert.multiply(155))
+      .add(tropicalAlpineRainTundra.multiply(161))
+      .add(tropicalAlpineWetTundra.multiply(162))
+      .add(tropicalAlpineMoistTundra.multiply(163))
+      .add(tropicalAlpineDryTundra.multiply(164))
+      .add(tropicalNivalDesert.multiply(171))
+    // --- Subtropical ---
+      .add(subtropicalPremontaneRainForest.multiply(211))
+      .add(subtropicalPremontaneWetForest.multiply(212))
+      .add(subtropicalPremontaneMoistForest.multiply(213))
+      .add(subtropicalPremontaneDryForest.multiply(214))
+      .add(subtropicalPremontaneThornWoodland.multiply(215))
+      .add(subtropicalPremontaneDesertScrub.multiply(216))
+      .add(subtropicalPremontaneDesert.multiply(217))
+      .add(subtropicalLowerMontaneRainForest.multiply(221))
+      .add(subtropicalLowerMontaneWetForest.multiply(222))
+      .add(subtropicalLowerMontaneMoistForest.multiply(223))
+      .add(subtropicalLowerMontaneDryForest.multiply(224))
+      .add(subtropicalLowerMontaneThornWoodland.multiply(225))
+      .add(subtropicalLowerMontaneDesertScrub.multiply(226))
+      .add(subtropicalLowerMontaneDesert.multiply(227))
+      .add(subtropicalMontaneRainForest.multiply(231))
+      .add(subtropicalMontaneWetForest.multiply(232))
+      .add(subtropicalMontaneMoistForest.multiply(233))
+      .add(subtropicalMontaneSteppe.multiply(234))
+      .add(subtropicalMontaneDesertScrub.multiply(235))
+      .add(subtropicalMontaneDesert.multiply(236))
+      .add(subtropicalSubalpineRainForest.multiply(241))
+      .add(subtropicalSubalpineWetForest.multiply(242))
+      .add(subtropicalSubalpineMoistForest.multiply(243))
+      .add(subtropicalSubalpineDryScrub.multiply(244))
+      .add(subtropicalSubalpineDesert.multiply(245))
+      .add(subtropicalAlpineRainTundra.multiply(251))
+      .add(subtropicalAlpineWetTundra.multiply(252))
+      .add(subtropicalAlpineMoistTundra.multiply(253))
+      .add(subtropicalAlpineDryTundra.multiply(254))
+      .add(subtropicalNivalDesert.multiply(261))
+    // --- Warm Temperate ---
+      .add(warmTemperateLowerMontaneRainForest.multiply(311))
+      .add(warmTemperateLowerMontaneWetForest.multiply(312))
+      .add(warmTemperateLowerMontaneMoistForest.multiply(313))
+      .add(warmTemperateLowerMontaneDryForest.multiply(314))
+      .add(warmTemperateLowerMontaneThornWoodland.multiply(315))
+      .add(warmTemperateLowerMontaneDesertScrub.multiply(316))
+      .add(warmTemperateLowerMontaneDesert.multiply(317))
+      .add(warmTemperateMontaneRainForest.multiply(321))
+      .add(warmTemperateMontaneWetForest.multiply(322))
+      .add(warmTemperateMontaneMoistForest.multiply(323))
+      .add(warmTemperateMontaneSteppe.multiply(324))
+      .add(warmTemperateMontaneDesertScrub.multiply(325))
+      .add(warmTemperateMontaneDesert.multiply(326))
+      .add(warmTemperateSubalpineRainForest.multiply(331))
+      .add(warmTemperateSubalpineWetForest.multiply(332))
+      .add(warmTemperateSubalpineMoistForest.multiply(333))
+      .add(warmTemperateSubalpineDryScrub.multiply(334))
+      .add(warmTemperateSubalpineDesert.multiply(335))
+      .add(warmTemperateAlpineRainTundra.multiply(341))
+      .add(warmTemperateAlpineWetTundra.multiply(342))
+      .add(warmTemperateAlpineMoistTundra.multiply(343))
+      .add(warmTemperateAlpineDryTundra.multiply(344))
+      .add(warmTemperateNivalDesert.multiply(351))
+    // --- Cool Temperate ---
+      .add(coolTemperateMontaneRainForest.multiply(411))
+      .add(coolTemperateMontaneWetForest.multiply(412))
+      .add(coolTemperateMontaneMoistForest.multiply(413))
+      .add(coolTemperateMontaneSteppe.multiply(414))
+      .add(coolTemperateMontaneDesertScrub.multiply(415))
+      .add(coolTemperateMontaneDesert.multiply(416))
+      .add(coolTemperateSubalpineRainForest.multiply(421))
+      .add(coolTemperateSubalpineWetForest.multiply(422))
+      .add(coolTemperateSubalpineMoistForest.multiply(423))
+      .add(coolTemperateSubalpineDryScrub.multiply(424))
+      .add(coolTemperateSubalpineDesert.multiply(425))
+      .add(coolTemperateAlpineRainTundra.multiply(431))
+      .add(coolTemperateAlpineWetTundra.multiply(432))
+      .add(coolTemperateAlpineMoistTundra.multiply(433))
+      .add(coolTemperateAlpineDryTundra.multiply(434))
+      .add(coolTemperateNivalDesert.multiply(441))
+    // --- Boreal ---
+      .add(borealSubalpineRainForest.multiply(511))
+      .add(borealSubalpineWetForest.multiply(512))
+      .add(borealSubalpineMoistForest.multiply(513))
+      .add(borealSubalpineDryScrub.multiply(514))
+      .add(borealSubalpineDesert.multiply(515))
+      .add(borealAlpineRainTundra.multiply(521))
+      .add(borealAlpineWetTundra.multiply(522))
+      .add(borealAlpineMoistTundra.multiply(523))
+      .add(borealAlpineDryTundra.multiply(524))
+      .add(borealNivalDesert.multiply(531))
+    // --- Subpolar ---
+      .add(subpolarAlpineRainTundra.multiply(611))
+      .add(subpolarAlpineWetTundra.multiply(612))
+      .add(subpolarAlpineMoistTundra.multiply(613))
+      .add(subpolarAlpineDryTundra.multiply(614))
+      .add(subpolarNivalDesert.multiply(621))
+    // --- Polar ---
+      .add(polarNivalDesert.multiply(711));
+
+  return lifeZones;
+};
+
+//Map.addLayer(hlz(1991, 2020), {min: 100, max: 711}, 'HLZ TerraClimate 1991-2020', 0);
+
+
+exports = {
+  classification: hlz,
+};

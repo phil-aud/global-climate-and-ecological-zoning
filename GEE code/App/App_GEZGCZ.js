@@ -1,7 +1,7 @@
-var hlzIII = ee.Image("projects/ee-philaudebert/assets/HoldridgeLifeZones/HLZIII_1995-2024_CRU409");
-var hlzII = ee.Image("projects/ee-philaudebert/assets/HoldridgeLifeZones/HLZII_1995-2024_CRU409");
-var gez = ee.Image("projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GlobalEcologicalZones_HLZI_1995-2024_CRU409");
-var gcz = ee.Image("projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GlobalClimateZones_1995-2024_CRU409");
+var hlzIII = ee.Image("projects/ee-philaudebert/assets/HoldridgeLifeZones/HLZIII_1995-2024_CRU409_927m");
+var hlzII = ee.Image("projects/ee-philaudebert/assets/HoldridgeLifeZones/HLZII_1995-2024_CRU409_927m");
+var gez = ee.Image("projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GlobalEcologicalZones_HLZI_1995-2024_CRU409_927m");
+var gcz = ee.Image("projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GlobalClimateZones_1995-2024_CRU409_927m");
 // Time series of CRU monthly temperature bands since 1901
 var cruTsTmp = ee.Image("projects/ee-philaudebert/assets/CRU/CRU409_1901-2024/cru_ts409_1901-2024_tmp");
 // Time series of CRU monthly precipitation bands since 1901
@@ -9,6 +9,8 @@ var cruTsPre = ee.Image("projects/ee-philaudebert/assets/CRU/CRU409_1901-2024/cr
 var cruTsPet = ee.Image("projects/ee-philaudebert/assets/CRU/CRU409_1901-2024/cru_ts409_1901-2024_pet");
 var elevation = ee.Image("USGS/GTOPO30").rename('elevation').select('elevation');
 var mon;
+var soil = ee.Image("projects/ee-maidiesinitam/assets/soilTypes/ipccFromHWSD2").remap(
+  [1,2,3,4,5,6,7,8,9,10,11,12,13],[7,1,2,8,7,4,8,3,8,5,6,8,8]);
 var yr;
 var thirtyY;
 
@@ -240,6 +242,18 @@ var labelMap_gcz = {
   10: 'Polar'
 };
 
+// Soil label map for remapped soil classes (1-8)
+var labelMap_soil = {
+  1: 'HAC',
+  2: 'LAC',
+  3: 'Sandy soils',
+  4: 'Spodic',
+  5: 'Volcanic soils',
+  6: 'Wetland soils',
+  7: 'Organic',
+  8: 'Water'
+};
+
 
 
 // Define an SLD style of discrete intervals to apply to the image.
@@ -447,6 +461,25 @@ Map.addLayer(styled_hlzII, {}, 'Holdridge Life Zones - Level II');
 Map.addLayer(styled_gez, {}, 'Global Ecological Zones (GEZ, Holdridge Life Zones - Level I)');
 Map.addLayer(styled_gcz, {}, 'Global Climate Zones (GCZ)');
 
+// Visualization parameters for soil (classes 1–8)
+var vis = {
+  min: 1,
+  max: 8,
+  palette: [
+    '#A66F03', // 1 HAC
+    '#FFD27F', // 2 LAC
+    '#FFFFBD', // 3 Sandy soils
+    '#D7D69D', // 4 Spodic
+    '#0083A8', // 5 Volcanic soils
+    '#8303A7', // 6 Wetland soils
+    '#2A7200', // 7 Organic
+    '#BDE7FF', // 8 Water
+  ]
+};
+
+// Add soil layer
+Map.addLayer(soil, vis, 'IPCC soil types');
+
 
 
 Map.style().set('cursor', 'crosshair');
@@ -474,9 +507,9 @@ var mainPanel = ui.Panel({
 
 
 // Main title
-var titleLabel = ui.Label('Global Climate and Ecological Zones');
+var titleLabel = ui.Label('IPCC land stratification for National Greenhouse Gas Inventories (NGGI)');
 titleLabel.style().set({
-  fontSize: '20px',
+  fontSize: '18px',
   fontWeight: 'bold',
   color: '#222',
   textAlign: 'center',
@@ -567,13 +600,15 @@ var gczRow = makeResultRow('GCZ', 'Click map to query', true);
 var gezRow = makeResultRow('GEZ (HLZ I)', 'Click map to query', true);
 var hlzIIRow = makeResultRow('HLZ II', 'Click map to query', false);
 var hlzIIIRow = makeResultRow('HLZ III', 'Click map to query', false);
+var soilRow = makeResultRow('Soil', 'Click map to query', false);
 
 var hlzBlock = ui.Panel({
   widgets: [
     gczRow.panel,
     gezRow.panel,
     hlzIIRow.panel,
-    hlzIIIRow.panel
+    hlzIIIRow.panel,
+    soilRow.panel
   ],
   layout: ui.Panel.Layout.flow('vertical'),
   style: {
@@ -828,6 +863,19 @@ var sourceLabelContent = ui.Label({
 });
 
 
+// EXPLORER - Soils subtitle (placed after Temperature & Precipitation sources)
+var explorerSoilsLabel = ui.Label('EXPLORER\nSoils');
+explorerSoilsLabel.style().set({
+  fontSize: '12px',
+  fontWeight: 'bold',
+  color: '#333',
+  textAlign: 'center',
+  stretch: 'horizontal',
+  margin: '8px 0 8px 0',
+  backgroundColor: 'white'
+});
+
+
 // Add all widgets
 mainPanel
   .add(titleLabel)
@@ -848,7 +896,8 @@ mainPanel
   .add(annualSummaryLabel)
   .add(chartPanel)
   .add(sourceLabel)
-  .add(sourceLabelContent);
+  .add(sourceLabelContent)
+  .add(explorerSoilsLabel);
 
 Map.add(mainPanel);
 
@@ -942,11 +991,25 @@ function updateLabel(coords) {
 
           var value_hlzIII = result_hlzIII ? result_hlzIII['biotemperature'] : null;
           var labelName_hlzIII = value_hlzIII !== null ? labelMap_hlzIII[value_hlzIII] : 'No data';
+            // Also sample soil at this point and then update all rows
+            soil.reduceRegion({
+              reducer: ee.Reducer.first(),
+              geometry: point,
+              scale: 30,
+              bestEffort: true
+            }).evaluate(function(result_soil) {
+              var value_soil = null;
+              if (result_soil) {
+                for (var k in result_soil) { value_soil = result_soil[k]; break; }
+              }
+              var labelName_soil = value_soil !== null ? labelMap_soil[value_soil] : 'No data';
 
-          gczRow.valueLabel.setValue(labelName_gcz + ' (' + value_gcz + ')');
-          gezRow.valueLabel.setValue(labelName_gez + ' (' + value_gez_adj + ')');
-          hlzIIRow.valueLabel.setValue(labelName_hlzII + ' (' + value_hlzII + ')');
-          hlzIIIRow.valueLabel.setValue(labelName_hlzIII + ' (' + value_hlzIII + ')');
+              gczRow.valueLabel.setValue(labelName_gcz + ' (' + value_gcz + ')');
+              gezRow.valueLabel.setValue(labelName_gez + ' (' + value_gez_adj + ')');
+              hlzIIRow.valueLabel.setValue(labelName_hlzII + ' (' + value_hlzII + ')');
+              hlzIIIRow.valueLabel.setValue(labelName_hlzIII + ' (' + value_hlzIII + ')');
+              soilRow.valueLabel.setValue(labelName_soil + ' (' + value_soil + ')');
+            });
         });
       });
     });
@@ -1041,7 +1104,16 @@ var plotClimateAtPoint = function(lon, lat, startYear, endYear) {
     bestEffort: true
   });
 
-  bioStats.evaluate(function(result) {
+  // Sample elevation at GTOPO30 native projection and resolution (30 arc-seconds)
+  var elevStats = elevation.reduceRegion({
+    reducer: ee.Reducer.first(),
+    geometry: point,
+    scale: elevation.projection().nominalScale(),
+    crs: elevation.projection(),
+    bestEffort: true
+  });
+
+  bioStats.combine(elevStats, true).evaluate(function(result) {
     if (result &&
         result.biotemperature !== null &&
         result.precipitation !== null &&
@@ -1358,5 +1430,73 @@ function createLegendGCZ() {
 }
 
 Map.add(createLegendGCZ());
+
+// ---- Legend for Soil ----
+function createLegendSoil() {
+  var legend = ui.Panel({
+    style: {
+      position: 'top-right',
+      padding: '8px 12px',
+      border: '1px solid #444',
+      borderRadius: '10px',
+      backgroundColor: 'white',
+      maxHeight: '220px'
+    }
+  });
+
+  var legendTitle = ui.Label({
+    value: 'IPCC Soil Types',
+    style: {
+      fontWeight: 'bold',
+      fontSize: '15px',
+      color: '#222',
+      margin: '0 0 6px 0',
+      backgroundColor: 'white'
+    }
+  });
+
+  legend.add(legendTitle);
+
+  var makeRow = function(color, name) {
+    var colorBox = ui.Label({
+      style: {
+        backgroundColor: color,
+        padding: '7px',
+        margin: '0 0 4px 0',
+        border: '1px solid #cccccc',
+        borderRadius: '3px'
+      }
+    });
+
+    var description = ui.Label({
+      value: name,
+      style: {
+        margin: '0 0 4px 6px',
+        fontSize: '11px',
+        color: '#222',
+        backgroundColor: 'white'
+      }
+    });
+
+    return ui.Panel({
+      widgets: [colorBox, description],
+      layout: ui.Panel.Layout.Flow('horizontal'),
+      style: {backgroundColor: 'white'}
+    });
+  };
+
+  var palette = vis.palette;
+  var names = [
+    'HAC', 'LAC', 'Sandy soils', 'Spodic', 'Volcanic soils', 'Wetland soils', 'Organic', 'Water'
+  ];
+
+  for (var i = 0; i < palette.length; i++) {
+    legend.add(makeRow('#' + palette[i].replace('#',''), names[i]));
+  }
+
+  return legend;
+}
+
+Map.add(createLegendSoil());
 
 Map.setCenter(10, 10, 2);

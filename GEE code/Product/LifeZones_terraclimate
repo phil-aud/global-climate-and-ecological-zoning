@@ -13,10 +13,11 @@
 //
 // Frost line approximation:
 //   CRU uses frost days (frs) with threshold 0.5 days/year to distinguish Subtropical/Warm Temperate.
-//   TerraClimate has no frost days band. The frost line is approximated from monthly minimum
-//   temperature (tmmn × 0.1): a calendar month is "frosty" if its mean tmmn < 0°C.
-//   - Subtropical:    no calendar month has mean tmmn < 0°C (≈ CRU: frost days ≤ 0.5/year)
-//   - Warm Temperate: at least one calendar month has mean tmmn < 0°C (≈ CRU: frost days > 0.5/year)
+//   TerraClimate has no frost days band. A pixel has frost if any individual monthly tmmn < 0°C
+//   in the period. Since tmmn is a monthly mean minimum, a sub-zero mean implies multiple
+//   frost days must have occurred that month.
+//   - Subtropical:    no month in the period has tmmn < 0°C
+//   - Warm Temperate: at least one month/year in the period has tmmn < 0°C
 //
 // Note: TerraClimate is available from 1958 onward.
 //
@@ -103,25 +104,7 @@ var tcAnnualMeanPet = function(startYear, endYear) {
   return monthlyMeans.sum();  // sum of 12 monthly means = mean annual total PET (mm/year)
 };
 
-// Monthly mean minimum temperature: tmmn scaled by 0.1 to get °C.
-// Used to approximate the frost line (TerraClimate has no frost days band).
-// Returns an ImageCollection of 12 single-band images (Jan–Dec) where each image
-// is the mean minimum temperature (°C) for that calendar month across the requested period.
-var tcMonthlyMeanTmmn = function(startYear, endYear) {
-  var filtered = terraClimate
-    .filter(ee.Filter.calendarRange(startYear, endYear, 'year'))
-    .map(function(img) {
-      return img.select('tmmn').multiply(0.1).rename('tmmn')
-                .copyProperties(img, ['system:time_start']);
-    });
-  var calendarMonths = ee.List.sequence(1, 12);
-  return ee.ImageCollection(calendarMonths.map(function(m) {
-    return filtered
-      .filter(ee.Filter.calendarRange(m, m, 'month'))
-      .mean()
-      .rename('tmmn');
-  }));
-};
+
 
 
 // =========================================================================
@@ -136,7 +119,6 @@ var hlz = function(startYear, endYear) {
   var tcTemp   = tcMonthlyMeanTemp(startYear, endYear);   // 12-image IC, monthly mean temp (°C)
   var tcPre    = tcMonthlyMeanPre(startYear, endYear);    // 12-image IC, monthly mean precip (mm)
   var annualPet = tcAnnualMeanPet(startYear, endYear);    // single-band image, annual PET (mm/year)
-  var tcTmmn   = tcMonthlyMeanTmmn(startYear, endYear);   // 12-image IC, monthly mean tmmn (°C)
 
   // -----------------------------------------------------------------------
   // Biotemperature computation (Holdridge 1967 / Derguy et al. 2019)
@@ -171,11 +153,15 @@ var hlz = function(startYear, endYear) {
 
   // -----------------------------------------------------------------------
   // Frost line approximation from TerraClimate tmmn
-  // frostMonthCount: number of calendar months (0–12) where mean tmmn < 0°C
+  // hasFrost: 1 if any individual monthly tmmn < 0°C in the period, 0 otherwise
+  // (If monthly mean tmmn < 0, multiple frost days must have occurred that month)
   // -----------------------------------------------------------------------
-  var tmmnBands = tcTmmn.toBands();
-  // Apply < 0 threshold to each of the 12 bands, then sum across bands
-  var frostMonthCount = tmmnBands.lt(0).reduce(ee.Reducer.sum());
+  var hasFrost = terraClimate
+    .filter(ee.Filter.calendarRange(startYear, endYear, 'year'))
+    .select('tmmn')
+    .min()
+    .multiply(0.1)
+    .lt(0);
 
   // -----------------------------------------------------------------------
   // A: Tropical — sea-level biotemperature >= 24°C
@@ -185,13 +171,13 @@ var hlz = function(startYear, endYear) {
   // -----------------------------------------------------------------------
   // B: Subtropical — 12°C <= biotemperature < 24°C, no frost month
   // -----------------------------------------------------------------------
-  var t0Bio_sub  = t0Bio.multiply(frostMonthCount.lte(0));    // zero-out where frost occurs
+  var t0Bio_sub  = t0Bio.multiply(hasFrost.not());            // zero-out where frost occurs
   var subtropical = t0Bio_sub.gte(12).multiply(t0Bio_sub.lt(24));
 
   // -----------------------------------------------------------------------
   // C: Warm Temperate — 12°C <= biotemperature < 24°C, at least one frost month
   // -----------------------------------------------------------------------
-  var t0Bio_wt    = t0Bio.multiply(frostMonthCount.gt(0));    // zero-out where no frost
+  var t0Bio_wt    = t0Bio.multiply(hasFrost);                 // zero-out where no frost
   var warmTemperate = t0Bio_wt.gte(12).multiply(t0Bio_wt.lt(24));
 
   // -----------------------------------------------------------------------

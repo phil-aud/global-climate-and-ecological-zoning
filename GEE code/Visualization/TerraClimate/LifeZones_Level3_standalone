@@ -1,0 +1,510 @@
+/////////////////////////////////////////////////////////////////////////////
+/////////////////////////// Holdridge Life Zones/////////////////////////////
+/////////////////////////////////////////////////////////////////////////////
+//
+// Self-contained: no require() needed. Paste directly into GEE Code Editor.
+//
+// Dataset: TerraClimate (IDAHO_EPSCOR/TERRACLIMATE)
+// Classification: Holdridge Life Zone ecology (Holdridge 1967)
+// https://reddcr.go.cr/sites/default/files/centro-de-documentacion/holdridge_1966_-_life_zone_ecology.pdf
+//
+// Level 3 = Full HLZ classification (3-digit codes:
+//   hundreds digit = latitudinal region, tens digit = altitudinal belt,
+//   units digit = moisture class)
+//
+// Band mapping:
+//   pr   → precipitation (mm/month, scale 1)
+//   pet  → reference evapotranspiration (mm/month, scale 0.1)
+//   tmmn → min temperature (°C, scale 0.1)
+//   tmmx → max temperature (°C, scale 0.1)   → mean = (tmmn + tmmx) × 0.05
+//
+// Frost line: a pixel has frost if any individual monthly tmmn < 0°C in the period.
+// Subtropical = no frost; Warm Temperate = at least one month with tmmn < 0.
+//
+// TerraClimate availability: 1958–present.
+
+// =========================================================================
+// Configuration — edit these to change the period
+// =========================================================================
+var START_YEAR = 1991;
+var END_YEAR   = 2020;
+
+// =========================================================================
+// Datasets
+// =========================================================================
+var terraClimate = ee.ImageCollection("IDAHO_EPSCOR/TERRACLIMATE");
+var elevation    = ee.Image("USGS/GTOPO30");
+
+// =========================================================================
+// Climate data helpers
+// =========================================================================
+
+// 12-image IC: monthly mean temperature (°C) = (tmmn + tmmx) × 0.05
+var tcMonthlyMeanTemp = function(startYear, endYear) {
+  var filtered = terraClimate
+    .filter(ee.Filter.calendarRange(startYear, endYear, 'year'))
+    .map(function(img) {
+      return img.select('tmmn').add(img.select('tmmx'))
+                .multiply(0.05).rename('tmp')
+                .copyProperties(img, ['system:time_start']);
+    });
+  return ee.ImageCollection(ee.List.sequence(1, 12).map(function(m) {
+    return filtered.filter(ee.Filter.calendarRange(m, m, 'month')).mean().rename('tmp');
+  }));
+};
+
+// 12-image IC: monthly mean precipitation (mm/month)
+var tcMonthlyMeanPre = function(startYear, endYear) {
+  var filtered = terraClimate
+    .filter(ee.Filter.calendarRange(startYear, endYear, 'year'))
+    .map(function(img) {
+      return img.select('pr').rename('pr').copyProperties(img, ['system:time_start']);
+    });
+  return ee.ImageCollection(ee.List.sequence(1, 12).map(function(m) {
+    return filtered.filter(ee.Filter.calendarRange(m, m, 'month')).mean().rename('pr');
+  }));
+};
+
+// Single-band image: mean annual total PET (mm/year)
+var tcAnnualMeanPet = function(startYear, endYear) {
+  var filtered = terraClimate
+    .filter(ee.Filter.calendarRange(startYear, endYear, 'year'))
+    .map(function(img) {
+      return img.select('pet').multiply(0.1).rename('pet')
+                .copyProperties(img, ['system:time_start']);
+    });
+  return ee.ImageCollection(ee.List.sequence(1, 12).map(function(m) {
+    return filtered.filter(ee.Filter.calendarRange(m, m, 'month')).mean().rename('pet');
+  })).sum();
+};
+
+
+
+// =========================================================================
+// Full HLZ classification (3-digit codes)
+// =========================================================================
+var holdridgeLifeZones = function(startYear, endYear) {
+
+  var tcTemp    = tcMonthlyMeanTemp(startYear, endYear);
+  var tcPre     = tcMonthlyMeanPre(startYear, endYear);
+  var annualPet = tcAnnualMeanPet(startYear, endYear);
+  // -- Biotemperature: clip monthly temp to [0, 30] °C --
+  var tb = tcTemp.toBands();
+  var mmb = function(b) {
+    return tb.select(b).max(ee.Image(0)).min(ee.Image(30)).rename('b');
+  };
+  var tBio = ee.ImageCollection.fromImages([
+    mmb(0), mmb(1), mmb(2), mmb(3), mmb(4),  mmb(5),
+    mmb(6), mmb(7), mmb(8), mmb(9), mmb(10), mmb(11)
+  ]).sum().divide(12);
+
+  // Sea-level biotemperature (+6°C per km elevation, only where tBio > 0)
+  var t0Bio = tBio.add(tBio.gt(0).multiply(elevation.divide(1000).multiply(6)));
+
+  // -- Frost: any month in the period with monthly mean tmmn < 0°C → frost present --
+  // (If monthly mean tmmn < 0, multiple frost days must have occurred that month)
+  var hasFrost = terraClimate
+    .filter(ee.Filter.calendarRange(startYear, endYear, 'year'))
+    .select('tmmn')
+    .min()
+    .multiply(0.1)
+    .lt(0);
+
+  // -- Latitudinal regions --
+  var tropical      = t0Bio.gte(24);
+  var subtropical   = t0Bio.multiply(hasFrost.not()).gte(12)
+                          .multiply(t0Bio.multiply(hasFrost.not()).lt(24));
+  var warmTemperate = t0Bio.multiply(hasFrost).gte(12)
+                          .multiply(t0Bio.multiply(hasFrost).lt(24));
+  var coolTemperate = t0Bio.gte(6).multiply(t0Bio.lt(12));
+  var boreal        = t0Bio.gte(3).multiply(t0Bio.lt(6));
+  var subpolar      = t0Bio.gte(1.5).multiply(t0Bio.lt(3));
+  var polar         = t0Bio.gte(0).multiply(t0Bio.lt(1.5));
+
+  // -- Altitudinal belts --
+  var el = elevation;
+  var tropicalBasal        = tropical.multiply(el.lte(1000));
+  var tropicalPremontane   = tropical.multiply(el.gt(1000).multiply(el.lte(2000)));
+  var tropicalLowerMontane = tropical.multiply(el.gt(2000).multiply(el.lte(3000)));
+  var tropicalMontane      = tropical.multiply(el.gt(3000).multiply(el.lte(4000)));
+  var tropicalSubalpine    = tropical.multiply(el.gt(4000).multiply(el.lte(4500)));
+  var tropicalAlpine       = tropical.multiply(el.gt(4500).multiply(el.lte(4750)));
+  var tropicalNival        = tropical.multiply(el.gt(4750));
+
+  var subtropicalPremontane   = subtropical.multiply(el.lte(1000));
+  var subtropicalLowerMontane = subtropical.multiply(el.gt(1000).multiply(el.lte(2000)));
+  var subtropicalMontane      = subtropical.multiply(el.gt(2000).multiply(el.lte(3000)));
+  var subtropicalSubalpine    = subtropical.multiply(el.gt(3000).multiply(el.lte(3500)));
+  var subtropicalAlpine       = subtropical.multiply(el.gt(3500).multiply(el.lte(3750)));
+  var subtropicalNival        = subtropical.multiply(el.gt(3750));
+
+  var warmTemperateLowerMontane = warmTemperate.multiply(el.lte(1000));
+  var warmTemperateMontane      = warmTemperate.multiply(el.gt(1000).multiply(el.lte(2000)));
+  var warmTemperateSubalpine    = warmTemperate.multiply(el.gt(2000).multiply(el.lte(2500)));
+  var warmTemperateAlpine       = warmTemperate.multiply(el.gt(2500).multiply(el.lte(2750)));
+  var warmTemperateNival        = warmTemperate.multiply(el.gt(2750));
+
+  var coolTemperateMontane   = coolTemperate.multiply(el.lte(1000));
+  var coolTemperateSubalpine = coolTemperate.multiply(el.gt(1000).multiply(el.lte(1500)));
+  var coolTemperateAlpine    = coolTemperate.multiply(el.gt(1500).multiply(el.lte(1750)));
+  var coolTemperateNival     = coolTemperate.multiply(el.gt(1750));
+
+  var borealSubalpine = boreal.multiply(el.lte(500));
+  var borealAlpine    = boreal.multiply(el.gt(500).multiply(el.lte(750)));
+  var borealNival     = boreal.multiply(el.gt(750));
+
+  var subpolarAlpine = subpolar.multiply(el.lte(250));
+  var subpolarNival  = subpolar.multiply(el.gt(250));
+
+  var polarNival = polar;
+
+  // -- Precipitation & PET ratios --
+  var map       = tcPre.sum().rename('precipitation');
+  var petRatio  = annualPet.divide(map).rename('petRatio');
+  var nMap      = map.divide(62.5).log().divide(ee.Number(2).log()).add(1);
+  var nPetRatio = petRatio.divide(0.125).log().divide(ee.Number(2).log()).add(1);
+
+  var ch = function(petRatioMax) {
+    var nMax = ee.Image(petRatioMax).divide(0.125).log().divide(ee.Image(2).log()).add(1).add(1);
+    return nMap.add(nMax.subtract(nPetRatio)).divide(2);
+  };
+
+  var chT  = ch(32);
+  var chSW = ch(16);
+  var chC  = ch(8);
+  var chB  = ch(4);
+  var chSP = ch(2);
+
+  var tPM = function(belt, v) { return belt.multiply(chSW.gt(v-1).multiply(chSW.lte(v))); };
+
+  return (
+    // Tropical Basal
+    tropicalBasal.multiply(chT.gt(8)).multiply(111)
+    .add(tropicalBasal.multiply(chT.gt(7).multiply(chT.lte(8))).multiply(112))
+    .add(tropicalBasal.multiply(chT.gt(6).multiply(chT.lte(7))).multiply(113))
+    .add(tropicalBasal.multiply(chT.gt(5).multiply(chT.lte(6))).multiply(114))
+    .add(tropicalBasal.multiply(chT.gt(4).multiply(chT.lte(5))).multiply(115))
+    .add(tropicalBasal.multiply(chT.gt(3).multiply(chT.lte(4))).multiply(116))
+    .add(tropicalBasal.multiply(chT.gt(2).multiply(chT.lte(3))).multiply(117))
+    .add(tropicalBasal.multiply(chT.lte(2)).multiply(118))
+    // Tropical Premontane
+    .add(tropicalPremontane.multiply(chSW.gt(7)).multiply(121))
+    .add(tPM(tropicalPremontane, 7).multiply(122))
+    .add(tPM(tropicalPremontane, 6).multiply(123))
+    .add(tPM(tropicalPremontane, 5).multiply(124))
+    .add(tPM(tropicalPremontane, 4).multiply(125))
+    .add(tPM(tropicalPremontane, 3).multiply(126))
+    .add(tropicalPremontane.multiply(chSW.lte(2)).multiply(127))
+    // Tropical Lower Montane
+    .add(tropicalLowerMontane.multiply(chSW.gt(7)).multiply(131))
+    .add(tPM(tropicalLowerMontane, 7).multiply(132))
+    .add(tPM(tropicalLowerMontane, 6).multiply(133))
+    .add(tPM(tropicalLowerMontane, 5).multiply(134))
+    .add(tPM(tropicalLowerMontane, 4).multiply(135))
+    .add(tPM(tropicalLowerMontane, 3).multiply(136))
+    .add(tropicalLowerMontane.multiply(chSW.lte(2)).multiply(137))
+    // Tropical Montane
+    .add(tropicalMontane.multiply(chC.gt(6)).multiply(141))
+    .add(tropicalMontane.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(142))
+    .add(tropicalMontane.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(143))
+    .add(tropicalMontane.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(144))
+    .add(tropicalMontane.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(145))
+    .add(tropicalMontane.multiply(chC.lte(2)).multiply(146))
+    // Tropical Subalpine
+    .add(tropicalSubalpine.multiply(chB.gt(5)).multiply(151))
+    .add(tropicalSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(152))
+    .add(tropicalSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(153))
+    .add(tropicalSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(154))
+    .add(tropicalSubalpine.multiply(chB.lte(2)).multiply(155))
+    // Tropical Alpine
+    .add(tropicalAlpine.multiply(chSP.gt(4)).multiply(161))
+    .add(tropicalAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(162))
+    .add(tropicalAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(163))
+    .add(tropicalAlpine.multiply(chSP.lte(2)).multiply(164))
+    .add(tropicalNival.multiply(171))
+    // Subtropical Premontane
+    .add(subtropicalPremontane.multiply(chSW.gt(7)).multiply(211))
+    .add(tPM(subtropicalPremontane, 7).multiply(212))
+    .add(tPM(subtropicalPremontane, 6).multiply(213))
+    .add(tPM(subtropicalPremontane, 5).multiply(214))
+    .add(tPM(subtropicalPremontane, 4).multiply(215))
+    .add(tPM(subtropicalPremontane, 3).multiply(216))
+    .add(subtropicalPremontane.multiply(chSW.lte(2)).multiply(217))
+    // Subtropical Lower Montane
+    .add(subtropicalLowerMontane.multiply(chSW.gt(7)).multiply(221))
+    .add(tPM(subtropicalLowerMontane, 7).multiply(222))
+    .add(tPM(subtropicalLowerMontane, 6).multiply(223))
+    .add(tPM(subtropicalLowerMontane, 5).multiply(224))
+    .add(tPM(subtropicalLowerMontane, 4).multiply(225))
+    .add(tPM(subtropicalLowerMontane, 3).multiply(226))
+    .add(subtropicalLowerMontane.multiply(chSW.lte(2)).multiply(227))
+    // Subtropical Montane
+    .add(subtropicalMontane.multiply(chC.gt(6)).multiply(231))
+    .add(subtropicalMontane.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(232))
+    .add(subtropicalMontane.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(233))
+    .add(subtropicalMontane.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(234))
+    .add(subtropicalMontane.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(235))
+    .add(subtropicalMontane.multiply(chC.lte(2)).multiply(236))
+    // Subtropical Subalpine
+    .add(subtropicalSubalpine.multiply(chB.gt(5)).multiply(241))
+    .add(subtropicalSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(242))
+    .add(subtropicalSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(243))
+    .add(subtropicalSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(244))
+    .add(subtropicalSubalpine.multiply(chB.lte(2)).multiply(245))
+    // Subtropical Alpine
+    .add(subtropicalAlpine.multiply(chSP.gt(4)).multiply(251))
+    .add(subtropicalAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(252))
+    .add(subtropicalAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(253))
+    .add(subtropicalAlpine.multiply(chSP.lte(2)).multiply(254))
+    .add(subtropicalNival.multiply(261))
+    // Warm Temperate Lower Montane
+    .add(warmTemperateLowerMontane.multiply(chSW.gt(7)).multiply(311))
+    .add(tPM(warmTemperateLowerMontane, 7).multiply(312))
+    .add(tPM(warmTemperateLowerMontane, 6).multiply(313))
+    .add(tPM(warmTemperateLowerMontane, 5).multiply(314))
+    .add(tPM(warmTemperateLowerMontane, 4).multiply(315))
+    .add(tPM(warmTemperateLowerMontane, 3).multiply(316))
+    .add(warmTemperateLowerMontane.multiply(chSW.lte(2)).multiply(317))
+    // Warm Temperate Montane
+    .add(warmTemperateMontane.multiply(chC.gt(6)).multiply(321))
+    .add(warmTemperateMontane.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(322))
+    .add(warmTemperateMontane.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(323))
+    .add(warmTemperateMontane.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(324))
+    .add(warmTemperateMontane.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(325))
+    .add(warmTemperateMontane.multiply(chC.lte(2)).multiply(326))
+    // Warm Temperate Subalpine
+    .add(warmTemperateSubalpine.multiply(chB.gt(5)).multiply(331))
+    .add(warmTemperateSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(332))
+    .add(warmTemperateSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(333))
+    .add(warmTemperateSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(334))
+    .add(warmTemperateSubalpine.multiply(chB.lte(2)).multiply(335))
+    // Warm Temperate Alpine
+    .add(warmTemperateAlpine.multiply(chSP.gt(4)).multiply(341))
+    .add(warmTemperateAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(342))
+    .add(warmTemperateAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(343))
+    .add(warmTemperateAlpine.multiply(chSP.lte(2)).multiply(344))
+    .add(warmTemperateNival.multiply(351))
+    // Cool Temperate Montane
+    .add(coolTemperateMontane.multiply(chC.gt(6)).multiply(411))
+    .add(coolTemperateMontane.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(412))
+    .add(coolTemperateMontane.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(413))
+    .add(coolTemperateMontane.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(414))
+    .add(coolTemperateMontane.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(415))
+    .add(coolTemperateMontane.multiply(chC.lte(2)).multiply(416))
+    // Cool Temperate Subalpine
+    .add(coolTemperateSubalpine.multiply(chB.gt(5)).multiply(421))
+    .add(coolTemperateSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(422))
+    .add(coolTemperateSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(423))
+    .add(coolTemperateSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(424))
+    .add(coolTemperateSubalpine.multiply(chB.lte(2)).multiply(425))
+    // Cool Temperate Alpine
+    .add(coolTemperateAlpine.multiply(chSP.gt(4)).multiply(431))
+    .add(coolTemperateAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(432))
+    .add(coolTemperateAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(433))
+    .add(coolTemperateAlpine.multiply(chSP.lte(2)).multiply(434))
+    .add(coolTemperateNival.multiply(441))
+    // Boreal Subalpine
+    .add(borealSubalpine.multiply(chB.gt(5)).multiply(511))
+    .add(borealSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(512))
+    .add(borealSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(513))
+    .add(borealSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(514))
+    .add(borealSubalpine.multiply(chB.lte(2)).multiply(515))
+    // Boreal Alpine
+    .add(borealAlpine.multiply(chSP.gt(4)).multiply(521))
+    .add(borealAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(522))
+    .add(borealAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(523))
+    .add(borealAlpine.multiply(chSP.lte(2)).multiply(524))
+    .add(borealNival.multiply(531))
+    // Subpolar Alpine
+    .add(subpolarAlpine.multiply(chSP.gt(4)).multiply(611))
+    .add(subpolarAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(612))
+    .add(subpolarAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(613))
+    .add(subpolarAlpine.multiply(chSP.lte(2)).multiply(614))
+    .add(subpolarNival.multiply(621))
+    // Polar
+    .add(polarNival.multiply(711))
+  );
+};
+
+// =========================================================================
+// Compute classification
+// =========================================================================
+var hlz = holdridgeLifeZones(START_YEAR, END_YEAR);
+
+// =========================================================================
+// SLD style (3-digit codes)
+// =========================================================================
+var sld_intervals =
+'<RasterSymbolizer>' +
+  '<ColorMap type="intervals" extended="false">' +
+    '<ColorMapEntry color="#ce1d09" quantity="111" label="Tropical Rain Forest"/>' +
+    '<ColorMapEntry color="#ce1d09" quantity="112" label="Tropical Wet Forest"/>' +
+    '<ColorMapEntry color="#D53B2A" quantity="113" label="Tropical Moist Forest"/>' +
+    '<ColorMapEntry color="#DB594B" quantity="114" label="Tropical Dry Forest"/>' +
+    '<ColorMapEntry color="#E2776B" quantity="115" label="Tropical Very Dry Forest"/>' +
+    '<ColorMapEntry color="#E8968C" quantity="116" label="Tropical Thorn Woodland"/>' +
+    '<ColorMapEntry color="#EFB4AD" quantity="117" label="Tropical Desert Scrub"/>' +
+    '<ColorMapEntry color="#F5D2CE" quantity="118" label="Tropical Desert"/>' +
+    '<ColorMapEntry color="#f19137" quantity="121" label="Tropical Premontane Rain Forest"/>' +
+    '<ColorMapEntry color="#F3A052" quantity="122" label="Tropical Premontane Wet Forest"/>' +
+    '<ColorMapEntry color="#F5AE6C" quantity="123" label="Tropical Premontane Moist Forest"/>' +
+    '<ColorMapEntry color="#F7BD87" quantity="124" label="Tropical Premontane Dry Forest"/>' +
+    '<ColorMapEntry color="#F9CCA2" quantity="125" label="Tropical Premontane Thorn Woodland"/>' +
+    '<ColorMapEntry color="#FADABC" quantity="126" label="Tropical Premontane Desert Scrub"/>' +
+    '<ColorMapEntry color="#FCE9D7" quantity="127" label="Tropical Premontane Desert"/>' +
+    '<ColorMapEntry color="#ffde4a" quantity="131" label="Tropical Lower Montane Rain Forest"/>' +
+    '<ColorMapEntry color="#FFE262" quantity="132" label="Tropical Lower Montane Wet Forest"/>' +
+    '<ColorMapEntry color="#FFE77A" quantity="133" label="Tropical Lower Montane Moist Forest"/>' +
+    '<ColorMapEntry color="#FFEB92" quantity="134" label="Tropical Lower Montane Dry Forest"/>' +
+    '<ColorMapEntry color="#FFF0AB" quantity="135" label="Tropical Lower Montane Thorn Woodland"/>' +
+    '<ColorMapEntry color="#FFF4C3" quantity="136" label="Tropical Lower Montane Desert Scrub"/>' +
+    '<ColorMapEntry color="#FFF8DB" quantity="137" label="Tropical Lower Montane Desert"/>' +
+    '<ColorMapEntry color="#9ec200" quantity="141" label="Tropical Montane Rain Forest"/>' +
+    '<ColorMapEntry color="#AECC29" quantity="142" label="Tropical Montane Wet Forest"/>' +
+    '<ColorMapEntry color="#BDD652" quantity="143" label="Tropical Montane Moist Forest"/>' +
+    '<ColorMapEntry color="#CDDF7A" quantity="144" label="Tropical Montane Steppe"/>' +
+    '<ColorMapEntry color="#DCE9A3" quantity="145" label="Tropical Montane Desert Scrub"/>' +
+    '<ColorMapEntry color="#ECF3CC" quantity="146" label="Tropical Montane Desert"/>' +
+    '<ColorMapEntry color="#009837" quantity="151" label="Tropical Subalpine Rain Forest"/>' +
+    '<ColorMapEntry color="#33AD5F" quantity="152" label="Tropical Subalpine Wet Forest"/>' +
+    '<ColorMapEntry color="#66C187" quantity="153" label="Tropical Subalpine Moist Forest"/>' +
+    '<ColorMapEntry color="#99D6AF" quantity="154" label="Tropical Subalpine Dry Scrub"/>' +
+    '<ColorMapEntry color="#CCEAD7" quantity="155" label="Tropical Subalpine Desert"/>' +
+    '<ColorMapEntry color="#00add6" quantity="161" label="Tropical Alpine Rain Tundra"/>' +
+    '<ColorMapEntry color="#44C3E1" quantity="162" label="Tropical Alpine Wet Tundra"/>' +
+    '<ColorMapEntry color="#88D9EC" quantity="163" label="Tropical Alpine Moist Tundra"/>' +
+    '<ColorMapEntry color="#CCEFF7" quantity="164" label="Tropical Alpine Desert"/>' +
+    '<ColorMapEntry color="#1451a0" quantity="171" label="Tropical Nival Desert"/>' +
+    '<ColorMapEntry color="#f19137" quantity="211" label="Subtropical Rain Forest"/>' +
+    '<ColorMapEntry color="#F3A052" quantity="212" label="Subtropical Wet Forest"/>' +
+    '<ColorMapEntry color="#F5AE6C" quantity="213" label="Subtropical Moist Forest"/>' +
+    '<ColorMapEntry color="#F7BD87" quantity="214" label="Subtropical Dry Forest"/>' +
+    '<ColorMapEntry color="#F9CCA2" quantity="215" label="Subtropical Thorn Woodland"/>' +
+    '<ColorMapEntry color="#FADABC" quantity="216" label="Subtropical Desert Scrub"/>' +
+    '<ColorMapEntry color="#FCE9D7" quantity="217" label="Subtropical Desert"/>' +
+    '<ColorMapEntry color="#ffde4a" quantity="221" label="Subtropical Lower Montane Rain Forest"/>' +
+    '<ColorMapEntry color="#FFE262" quantity="222" label="Subtropical Lower Montane Wet Forest"/>' +
+    '<ColorMapEntry color="#FFE77A" quantity="223" label="Subtropical Lower Montane Moist Forest"/>' +
+    '<ColorMapEntry color="#FFEB92" quantity="224" label="Subtropical Lower Montane Dry Forest"/>' +
+    '<ColorMapEntry color="#FFF0AB" quantity="225" label="Subtropical Lower Montane Thorn Woodland"/>' +
+    '<ColorMapEntry color="#FFF4C3" quantity="226" label="Subtropical Lower Montane Desert Scrub"/>' +
+    '<ColorMapEntry color="#FFF8DB" quantity="227" label="Subtropical Lower Montane Desert"/>' +
+    '<ColorMapEntry color="#9ec200" quantity="231" label="Subtropical Montane Rain Forest"/>' +
+    '<ColorMapEntry color="#AECC29" quantity="232" label="Subtropical Montane Wet Forest"/>' +
+    '<ColorMapEntry color="#BDD652" quantity="233" label="Subtropical Montane Moist Forest"/>' +
+    '<ColorMapEntry color="#CDDF7A" quantity="234" label="Subtropical Montane Steppe"/>' +
+    '<ColorMapEntry color="#DCE9A3" quantity="235" label="Subtropical Montane Desert Scrub"/>' +
+    '<ColorMapEntry color="#ECF3CC" quantity="236" label="Subtropical Montane Desert"/>' +
+    '<ColorMapEntry color="#009837" quantity="241" label="Subtropical Subalpine Rain Forest"/>' +
+    '<ColorMapEntry color="#33AD5F" quantity="242" label="Subtropical Subalpine Wet Forest"/>' +
+    '<ColorMapEntry color="#66C187" quantity="243" label="Subtropical Subalpine Moist Forest"/>' +
+    '<ColorMapEntry color="#99D6AF" quantity="244" label="Subtropical Subalpine Dry Scrub"/>' +
+    '<ColorMapEntry color="#CCEAD7" quantity="245" label="Subtropical Subalpine Desert"/>' +
+    '<ColorMapEntry color="#00add6" quantity="251" label="Subtropical Alpine Rain Tundra"/>' +
+    '<ColorMapEntry color="#44C3E1" quantity="252" label="Subtropical Alpine Wet Tundra"/>' +
+    '<ColorMapEntry color="#88D9EC" quantity="253" label="Subtropical Alpine Moist Tundra"/>' +
+    '<ColorMapEntry color="#CCEFF7" quantity="254" label="Subtropical Alpine Desert"/>' +
+    '<ColorMapEntry color="#1451a0" quantity="261" label="Subtropical Nival Desert"/>' +
+    '<ColorMapEntry color="#ffde4a" quantity="311" label="Warm Temperate Rain Forest"/>' +
+    '<ColorMapEntry color="#FFE262" quantity="312" label="Warm Temperate Wet Forest"/>' +
+    '<ColorMapEntry color="#FFE77A" quantity="313" label="Warm Temperate Moist Forest"/>' +
+    '<ColorMapEntry color="#FFEB92" quantity="314" label="Warm Temperate Dry Forest"/>' +
+    '<ColorMapEntry color="#FFF0AB" quantity="315" label="Warm Temperate Thorn Woodland"/>' +
+    '<ColorMapEntry color="#FFF4C3" quantity="316" label="Warm Temperate Desert Scrub"/>' +
+    '<ColorMapEntry color="#FFF8DB" quantity="317" label="Warm Temperate Desert"/>' +
+    '<ColorMapEntry color="#9ec200" quantity="321" label="Warm Temperate Montane Rain Forest"/>' +
+    '<ColorMapEntry color="#AECC29" quantity="322" label="Warm Temperate Montane Wet Forest"/>' +
+    '<ColorMapEntry color="#BDD652" quantity="323" label="Warm Temperate Montane Moist Forest"/>' +
+    '<ColorMapEntry color="#CDDF7A" quantity="324" label="Warm Temperate Montane Steppe"/>' +
+    '<ColorMapEntry color="#DCE9A3" quantity="325" label="Warm Temperate Montane Desert Scrub"/>' +
+    '<ColorMapEntry color="#ECF3CC" quantity="326" label="Warm Temperate Montane Desert"/>' +
+    '<ColorMapEntry color="#009837" quantity="331" label="Warm Temperate Subalpine Rain Forest"/>' +
+    '<ColorMapEntry color="#33AD5F" quantity="332" label="Warm Temperate Subalpine Wet Forest"/>' +
+    '<ColorMapEntry color="#66C187" quantity="333" label="Warm Temperate Subalpine Moist Forest"/>' +
+    '<ColorMapEntry color="#99D6AF" quantity="334" label="Warm Temperate Subalpine Dry Scrub"/>' +
+    '<ColorMapEntry color="#CCEAD7" quantity="335" label="Warm Temperate Subalpine Desert"/>' +
+    '<ColorMapEntry color="#00add6" quantity="341" label="Warm Temperate Alpine Rain Tundra"/>' +
+    '<ColorMapEntry color="#44C3E1" quantity="342" label="Warm Temperate Alpine Wet Tundra"/>' +
+    '<ColorMapEntry color="#88D9EC" quantity="343" label="Warm Temperate Alpine Moist Tundra"/>' +
+    '<ColorMapEntry color="#CCEFF7" quantity="344" label="Warm Temperate Alpine Desert"/>' +
+    '<ColorMapEntry color="#1451a0" quantity="351" label="Warm Temperate Nival Desert"/>' +
+    '<ColorMapEntry color="#9ec200" quantity="411" label="Cool Temperate Rain Forest"/>' +
+    '<ColorMapEntry color="#AECC29" quantity="412" label="Cool Temperate Wet Forest"/>' +
+    '<ColorMapEntry color="#BDD652" quantity="413" label="Cool Temperate Moist Forest"/>' +
+    '<ColorMapEntry color="#CDDF7A" quantity="414" label="Cool Temperate Steppe"/>' +
+    '<ColorMapEntry color="#DCE9A3" quantity="415" label="Cool Temperate Desert Scrub"/>' +
+    '<ColorMapEntry color="#ECF3CC" quantity="416" label="Cool Temperate Desert"/>' +
+    '<ColorMapEntry color="#009837" quantity="421" label="Cool Temperate Subalpine Rain Forest"/>' +
+    '<ColorMapEntry color="#33AD5F" quantity="422" label="Cool Temperate Subalpine Wet Forest"/>' +
+    '<ColorMapEntry color="#66C187" quantity="423" label="Cool Temperate Subalpine Moist Forest"/>' +
+    '<ColorMapEntry color="#99D6AF" quantity="424" label="Cool Temperate Subalpine Dry Scrub"/>' +
+    '<ColorMapEntry color="#CCEAD7" quantity="425" label="Cool Temperate Subalpine Desert"/>' +
+    '<ColorMapEntry color="#00add6" quantity="431" label="Cool Temperate Alpine Rain Tundra"/>' +
+    '<ColorMapEntry color="#44C3E1" quantity="432" label="Cool Temperate Alpine Wet Tundra"/>' +
+    '<ColorMapEntry color="#88D9EC" quantity="433" label="Cool Temperate Alpine Moist Tundra"/>' +
+    '<ColorMapEntry color="#CCEFF7" quantity="434" label="Cool Temperate Alpine Desert"/>' +
+    '<ColorMapEntry color="#1451a0" quantity="441" label="Cool Temperate Nival Desert"/>' +
+    '<ColorMapEntry color="#009837" quantity="511" label="Boreal Rain Forest"/>' +
+    '<ColorMapEntry color="#33AD5F" quantity="512" label="Boreal Wet Forest"/>' +
+    '<ColorMapEntry color="#66C187" quantity="513" label="Boreal Moist Forest"/>' +
+    '<ColorMapEntry color="#99D6AF" quantity="514" label="Boreal Dry Scrub"/>' +
+    '<ColorMapEntry color="#CCEAD7" quantity="515" label="Boreal Desert"/>' +
+    '<ColorMapEntry color="#00add6" quantity="521" label="Boreal Alpine Rain Tundra"/>' +
+    '<ColorMapEntry color="#44C3E1" quantity="522" label="Boreal Alpine Wet Tundra"/>' +
+    '<ColorMapEntry color="#88D9EC" quantity="523" label="Boreal Alpine Moist Tundra"/>' +
+    '<ColorMapEntry color="#CCEFF7" quantity="524" label="Boreal Alpine Desert"/>' +
+    '<ColorMapEntry color="#1451a0" quantity="531" label="Boreal Nival Desert"/>' +
+    '<ColorMapEntry color="#00add6" quantity="611" label="Subpolar Rain Tundra"/>' +
+    '<ColorMapEntry color="#44C3E1" quantity="612" label="Subpolar Wet Tundra"/>' +
+    '<ColorMapEntry color="#88D9EC" quantity="613" label="Subpolar Moist Tundra"/>' +
+    '<ColorMapEntry color="#CCEFF7" quantity="614" label="Subpolar Desert"/>' +
+    '<ColorMapEntry color="#1451a0" quantity="621" label="Subpolar Nival Desert"/>' +
+    '<ColorMapEntry color="#1451a0" quantity="711" label="Polar"/>' +
+  '</ColorMap>' +
+'</RasterSymbolizer>';
+
+// =========================================================================
+// Display
+// =========================================================================
+Map.setCenter(0, 35, 2);
+Map.addLayer(hlz, {}, 'HLZ Level 3 (raw codes) - TerraClimate ' + START_YEAR + '-' + END_YEAR, 0);
+Map.addLayer(hlz.sldStyle(sld_intervals), {}, 'Holdridge Life Zones Level 3 - TerraClimate ' + START_YEAR + '-' + END_YEAR);
+
+// =========================================================================
+// Legend
+// =========================================================================
+var legend = ui.Panel({style: {position: 'bottom-left', padding: '8px 15px'}});
+legend.add(ui.Label('HLZ Level 3 — TerraClimate', {fontWeight: 'bold', fontSize: '14px'}));
+
+var makeRow = function(color, label) {
+  var colorBox = ui.Label('', {
+    backgroundColor: color,
+    padding: '8px',
+    margin: '0 4px 4px 0'
+  });
+  var description = ui.Label(label, {margin: '0 0 4px 6px'});
+  return ui.Panel([colorBox, description], ui.Panel.Layout.Flow('horizontal'));
+};
+
+// Representative entries by latitudinal region
+var legendEntries = [
+  ['#ce1d09', 'Tropical (1xx)'],
+  ['#f19137', 'Subtropical (2xx)'],
+  ['#ffde4a', 'Warm Temperate (3xx)'],
+  ['#9ec200', 'Cool Temperate (4xx)'],
+  ['#009837', 'Boreal (5xx)'],
+  ['#00add6', 'Subpolar (6xx)'],
+  ['#1451a0', 'Polar (7xx)'],
+];
+legendEntries.forEach(function(e) { legend.add(makeRow(e[0], e[1])); });
+Map.add(legend);
+
+// =========================================================================
+// Export
+// =========================================================================
+Export.image.toAsset({
+  image: hlz,
+  description: 'HoldridgeLifeZones_Level3_TerraClimate_' + START_YEAR + '-' + END_YEAR,
+  scale: 1000,
+  maxPixels: 9e9
+});

@@ -66,11 +66,10 @@ function GlobalClimateZonesTriangle({ bioData }) {
 
   // ── Reference biotemperature line ────────────────────────────────────────────
   const refBiotempLine = useMemo(() => {
-    const tBioSL = parseFloat(bioData?.biotemperature);
-    const elev = parseFloat(bioData?.elevation);
+    const tBioSL = parseFloat(bioData?.tBio0);          // t0Bio — sea-level value for triangle axis
+    const tBioElev = parseFloat(bioData?.biotemperature); // actual tBio at elevation — for label
     if (!tBioSL || isNaN(tBioSL)) return null;
-    const bt = isNaN(elev) ? tBioSL : tBioSL - (elev * 6 / 1000);
-    const btClamped = Math.max(1.5, Math.min(48, bt));
+    const btClamped = Math.max(1.5, Math.min(48, tBioSL));
     const f = Math.log2(btClamped / 1.5) / Math.log2(48 / 1.5);
     const y = IMG2_BT_Y_TOP + f * (IMG2_BT_Y_BOT - IMG2_BT_Y_TOP);
     const yClipped = Math.min(y, IMG2_BL.y);
@@ -78,8 +77,9 @@ function GlobalClimateZonesTriangle({ bioData }) {
     const t = (yClipped - IMG2_APEX.y) / triH;
     const x1 = IMG2_APEX.x + (IMG2_BL.x - IMG2_APEX.x) * t;
     const x2 = IMG2_APEX.x + (IMG2_BR.x - IMG2_APEX.x) * t;
-    return { x1, y1: yClipped, x2, y2: yClipped, label: `${Math.round(bt * 10) / 10}° (tBio)` };
-  }, [bioData?.biotemperature, bioData?.elevation]);
+    const labelBt = !isNaN(tBioElev) ? tBioElev : tBioSL;
+    return { x1, y1: yClipped, x2, y2: yClipped, label: `${Math.round(labelBt * 10) / 10}° (tBio)` };
+  }, [bioData?.tBio0, bioData?.biotemperature]);
 
   // ── Reference precipitation line ─────────────────────────────────────────────
   // Starts at the base, goes parallel to the left side (BL → APEX), ends on right side.

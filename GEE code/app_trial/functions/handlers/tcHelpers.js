@@ -25,6 +25,16 @@ const ELEVATION_ASSET = 'USGS/GTOPO30';
 const TC_MIN_YEAR = 1958;
 const TC_MAX_YEAR = 2024;
 
+// ── CRU TS 4.09 asset paths ──────────────────────────────────────────────────
+const CRU_TMP = 'projects/ee-philaudebert/assets/CRU/CRU409_1901-2024/cru_ts409_1901-2024_tmp';
+const CRU_PRE = 'projects/ee-philaudebert/assets/CRU/CRU409_1901-2024/cru_ts409_1901-2024_pre';
+const CRU_PET = 'projects/ee-philaudebert/assets/CRU/CRU409_1901-2024/cru_ts409_1901-2024_pet';
+const CRU_FRS = 'projects/ee-philaudebert/assets/CRU/CRU409_1901-2024/cru_ts409_1901-2024_frs';
+const CRU_MIN_YEAR = 1901;
+const CRU_MAX_YEAR = 2024;
+// Total monthly bands in the CRU asset: Jan 1901 = band 1, Dec 2024 = band 1488
+const CRU_TOTAL_BANDS = (CRU_MAX_YEAR - CRU_MIN_YEAR + 1) * 12; // 1488
+
 // ── Climate helpers ──────────────────────────────────────────────────────────
 
 /**
@@ -85,41 +95,44 @@ function tcAnnualMeanPet(startYear, endYear) {
   return ee.ImageCollection(months).sum();
 }
 
-// ── Full HLZ classification (3-digit codes) ──────────────────────────────────
+// ── CRU monthly means helper ────────────────────────────────────────────────
 
 /**
- * Computes the full Holdridge Life Zone classification (3-digit codes)
- * from TerraClimate data for the specified period.
- * Returns a single-band ee.Image with 3-digit HLZ codes.
+ * Compute 12 monthly-mean images from a CRU TS multi-band ee.Image.
+ * CRU images store one band per calendar month: Jan 1901 = band 1, Feb 1901 = band 2, …
+ * Returns an ee.ImageCollection of 12 images (Jan..Dec), each renamed 'v'.
+ * @param {ee.Image} img - CRU multi-band image (tmp, pre, pet, or frs)
+ * @param {number} startYear - First year of the period (>= 1901)
+ * @param {number} endYear   - Last year of the period (<= 2024)
  */
-function computeHLZ(startYear, endYear) {
-  const elevation = ee.Image(ELEVATION_ASSET);
-  const tcTemp    = tcMonthlyMeanTemp(startYear, endYear);
-  const tcPre     = tcMonthlyMeanPre(startYear, endYear);
-  const annualPet = tcAnnualMeanPet(startYear, endYear);
+function cruMonthlyMeans(img, startYear, endYear) {
+  // Rename all bands to sequential strings '1'..'CRU_TOTAL_BANDS'
+  const allNames  = Array.from({ length: CRU_TOTAL_BANDS }, (_, i) => String(i + 1));
+  const renamed   = img.rename(allNames);
+  // 1-based index of the January band for startYear
+  // Jan 1901 = 1, Jan 1902 = 13, …, Jan Y = (Y - 1901) * 12 + 1
+  const startBand = (startYear - 1901) * 12 + 1;
+  const nYears    = endYear - startYear + 1;
+  const monthly   = [];
+  for (let m = 1; m <= 12; m++) {
+    const bands = Array.from({ length: nYears }, (_, y) => String(startBand + (m - 1) + y * 12));
+    monthly.push(renamed.select(bands).reduce(ee.Reducer.mean()).rename('v'));
+  }
+  return ee.ImageCollection(monthly);
+}
 
-  // ── Biotemperature: clamp monthly temp to [0, 30] °C ──
-  const tb = tcTemp.toBands();
-  const mmb = b => tb.select(b).max(ee.Image(0)).min(ee.Image(30)).rename('b');
+// ── Shared HLZ classification kernel ────────────────────────────────────────
 
-  const tBio = ee.ImageCollection.fromImages([
-    mmb(0), mmb(1), mmb(2),  mmb(3),  mmb(4),  mmb(5),
-    mmb(6), mmb(7), mmb(8),  mmb(9),  mmb(10), mmb(11),
-  ]).sum().divide(12);
-
-  // Sea-level biotemperature: 6·cos(lat) °C per km elevation (only where tBio > 0)
-  const lapseRate = ee.Image.pixelLonLat().select('latitude')
-                     .multiply(Math.PI / 180).cos().multiply(6);
-  const t0Bio = tBio.add(tBio.gt(0).multiply(elevation.divide(1000).multiply(lapseRate)));
-
-  // ── Frost: any month where tmmn×0.1 < 0 ──
-  const hasFrost = ee.ImageCollection(TC_COLLECTION)
-    .filter(ee.Filter.calendarRange(startYear, endYear, 'year'))
-    .select('tmmn')
-    .min()
-    .multiply(0.1)
-    .lt(0);
-
+/**
+ * Builds the 3-digit HLZ code image from pre-computed climate variables.
+ * Called by both computeHLZ (TerraClimate) and computeHLZ_CRU.
+ * @param {ee.Image} t0Bio      - Sea-level mean annual biotemperature (°C)
+ * @param {ee.Image} hasFrost   - Binary: 1 where frost occurs, 0 elsewhere
+ * @param {ee.Image} annualPrecip - Mean annual precipitation (mm/year)
+ * @param {ee.Image} annualPet  - Mean annual PET (mm/year)
+ * @param {ee.Image} elevation  - Elevation (m)
+ */
+function _buildHLZImage(t0Bio, hasFrost, annualPrecip, annualPet, elevation) {
   // ── Latitudinal regions ──
   const tropical      = t0Bio.gte(24);
   const subtropical   = t0Bio.multiply(hasFrost.not()).gte(12)
@@ -170,8 +183,8 @@ function computeHLZ(startYear, endYear) {
   const polarNival = polar;
 
   // ── Moisture class (circumcenter-of-hypotenuse) ──
-  const map       = tcPre.sum().rename('precipitation');
-  const petRatio  = annualPet.divide(map).rename('petRatio');
+  const map       = annualPrecip;
+  const petRatio  = annualPet.divide(map);
   const nMap      = map.divide(62.5).log().divide(ee.Number(2).log()).add(1);
   const nPetRatio = petRatio.divide(0.125).log().divide(ee.Number(2).log()).add(1);
 
@@ -186,7 +199,6 @@ function computeHLZ(startYear, endYear) {
   const chB  = ch(4);    // Boreal
   const chSP = ch(2);    // Subpolar
 
-  // Belt × moisture class helper (shared by Subtropical / Warm Temperate belts with chSW)
   const tPM = (belt, v) => belt.multiply(chSW.gt(v - 1).multiply(chSW.lte(v)));
 
   // ── Life zone image ──
@@ -345,6 +357,83 @@ function computeHLZ(startYear, endYear) {
   );
 }
 
+// ── Full HLZ classification (3-digit codes) ──────────────────────────────────
+
+/**
+ * Computes the full Holdridge Life Zone classification (3-digit codes)
+ * from TerraClimate data for the specified period.
+ * Returns a single-band ee.Image with 3-digit HLZ codes.
+ */
+function computeHLZ(startYear, endYear) {
+  const elevation = ee.Image(ELEVATION_ASSET);
+  const tcTemp    = tcMonthlyMeanTemp(startYear, endYear);
+  const tcPre     = tcMonthlyMeanPre(startYear, endYear);
+  const annualPet = tcAnnualMeanPet(startYear, endYear);
+
+  // ── Biotemperature: clamp monthly temp to [0, 30] °C ──
+  const tb = tcTemp.toBands();
+  const mmb = b => tb.select(b).max(ee.Image(0)).min(ee.Image(30)).rename('b');
+
+  const tBio = ee.ImageCollection.fromImages([
+    mmb(0), mmb(1), mmb(2),  mmb(3),  mmb(4),  mmb(5),
+    mmb(6), mmb(7), mmb(8),  mmb(9),  mmb(10), mmb(11),
+  ]).sum().divide(12);
+
+  // Sea-level biotemperature: 6·cos(lat) °C per km elevation (only where tBio > 0)
+  const lapseRate = ee.Image.pixelLonLat().select('latitude')
+                     .multiply(Math.PI / 180).cos().multiply(6);
+  const t0Bio = tBio.add(tBio.gt(0).multiply(elevation.divide(1000).multiply(lapseRate)));
+
+  // ── Frost: any month where tmmn×0.1 < 0 ──
+  const hasFrost = ee.ImageCollection(TC_COLLECTION)
+    .filter(ee.Filter.calendarRange(startYear, endYear, 'year'))
+    .select('tmmn')
+    .min()
+    .multiply(0.1)
+    .lt(0);
+
+  return _buildHLZImage(t0Bio, hasFrost, tcPre.sum(), annualPet, elevation);
+}
+
+/**
+ * Computes the full Holdridge Life Zone classification (3-digit codes)
+ * from CRU TS data for the specified period.
+ * Returns a single-band ee.Image with 3-digit HLZ codes.
+ *
+ * CRU TS bands: temperature (°C), precipitation (mm/month),
+ *               PET (mm/day), frost days (days/month).
+ */
+function computeHLZ_CRU(startYear, endYear) {
+  const elevation = ee.Image(ELEVATION_ASSET);
+  const cruTemp = cruMonthlyMeans(ee.Image(CRU_TMP), startYear, endYear);
+  const cruPre  = cruMonthlyMeans(ee.Image(CRU_PRE), startYear, endYear);
+  const cruFrs  = cruMonthlyMeans(ee.Image(CRU_FRS), startYear, endYear);
+
+  // Annual PET (mm/year): CRU PET is in mm/day; mean over 12 monthly means × 365.25
+  const annualPet = cruMonthlyMeans(ee.Image(CRU_PET), startYear, endYear)
+    .mean().multiply(365.25);
+
+  // ── Biotemperature: clamp monthly temp to [0, 30] °C ──
+  const tb  = cruTemp.toBands();
+  const mmb = b => tb.select(b).max(ee.Image(0)).min(ee.Image(30)).rename('b');
+
+  const tBio = ee.ImageCollection.fromImages([
+    mmb(0), mmb(1), mmb(2),  mmb(3),  mmb(4),  mmb(5),
+    mmb(6), mmb(7), mmb(8),  mmb(9),  mmb(10), mmb(11),
+  ]).sum().divide(12);
+
+  // Sea-level biotemperature: 6·cos(lat) °C per km elevation (only where tBio > 0)
+  const lapseRate = ee.Image.pixelLonLat().select('latitude')
+                     .multiply(Math.PI / 180).cos().multiply(6);
+  const t0Bio = tBio.add(tBio.gt(0).multiply(elevation.divide(1000).multiply(lapseRate)));
+
+  // ── Frost: mean annual frost days (sum of 12 monthly means) > 0.5 ──
+  // Follows Lugo et al. 1999: < 0.5 frost days/year = no-frost zone
+  const hasFrost = cruFrs.sum().gt(0.5);
+
+  return _buildHLZImage(t0Bio, hasFrost, cruPre.sum(), annualPet, elevation);
+}
+
 // ── Remap tables ─────────────────────────────────────────────────────────────
 
 const HLZ_FROM = [
@@ -493,6 +582,8 @@ module.exports = {
   TC_MIN_YEAR,
   TC_MAX_YEAR,
   TC_COLLECTION,
+  CRU_MIN_YEAR,
+  CRU_MAX_YEAR,
   HLZ_FROM,
   GCZ_TO,
   GEZ_TO,
@@ -501,6 +592,7 @@ module.exports = {
   GEZ_LOOKUP,
   HLZII_LOOKUP,
   computeHLZ,
+  computeHLZ_CRU,
   tcMonthlyMeanTemp,
   tcMonthlyMeanPre,
   tcAnnualMeanPet,

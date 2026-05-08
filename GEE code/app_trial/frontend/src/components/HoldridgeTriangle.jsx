@@ -313,13 +313,12 @@ function HoldridgeTriangle({ bioData, imgSrc, hideReference = false, title = 'Ho
 
   // Reference biotemperature line — driven by bioData, computed in pyramid1.svg coordinate space
   const refBiotempLine = useMemo(() => {
-    const tBioSL = parseFloat(bioData?.biotemperature);
-    const elev = parseFloat(bioData?.elevation);
+    const tBioSL = parseFloat(bioData?.tBio0);          // t0Bio — sea-level value for triangle axis
+    const tBioElev = parseFloat(bioData?.biotemperature); // actual tBio at elevation — for label
     if (!tBioSL || isNaN(tBioSL)) return null;
-    const bt = isNaN(elev) ? tBioSL : tBioSL - (elev * 6 / 1000);
     // Extend geometric progression one octave past 24° → 48°
     // Spacing in pyramid1.svg is 82px per octave (doubling); 48° extrapolates to y=994.63
-    const btClamped = Math.max(1.5, Math.min(48, bt));
+    const btClamped = Math.max(1.5, Math.min(48, tBioSL));
     const f = Math.log2(btClamped / 1.5) / Math.log2(48 / 1.5);
     const yTop = IMG_BT_Y[1.5];  // 583.63
     const yBot = 994.63;          // extrapolated 48° (912.63 + 82)
@@ -330,8 +329,9 @@ function HoldridgeTriangle({ bioData, imgSrc, hideReference = false, title = 'Ho
     const t = (yClipped - IMG_APEX.y) / triH;
     const x1 = IMG_APEX.x + (IMG_BL.x - IMG_APEX.x) * t;
     const x2 = IMG_APEX.x + (IMG_BR.x - IMG_APEX.x) * t;
-    return { x1, y1: yClipped, x2, y2: yClipped, label: `${Math.round(bt * 10) / 10}° (tBio)` };
-  }, [bioData?.biotemperature, bioData?.elevation]);
+    const labelBt = !isNaN(tBioElev) ? tBioElev : tBioSL;
+    return { x1, y1: yClipped, x2, y2: yClipped, label: `${Math.round(labelBt * 10) / 10}° (tBio)` };
+  }, [bioData?.tBio0, bioData?.biotemperature]);
 
   // Reference precipitation line — diagonal parallel to LEFT side (60° from base)
   // Precipitation tick marks are along the BASE of the triangle in pyramid1.svg.

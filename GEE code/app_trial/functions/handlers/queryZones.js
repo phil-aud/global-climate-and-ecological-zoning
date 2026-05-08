@@ -15,6 +15,7 @@ const {
 const { labelMap_soil } = require('../utils/labelMaps');
 const {
   computeHLZ,
+  computeHLZ_CRU,
   HLZ_FROM,
   GCZ_TO,
   GEZ_TO,
@@ -27,6 +28,10 @@ const {
 // Default period used for TerraClimate zone classification
 const TC_ZONE_START = 1995;
 const TC_ZONE_END   = 2024;
+
+// Default period used for CRU zone classification
+const CRU_ZONE_START = 1995;
+const CRU_ZONE_END   = 2024;
 
 /**
  * Query zone classifications at a point
@@ -108,111 +113,49 @@ async function queryZones(lon, lat, dataset = 'cru') {
     };
   }
 
-  // ── CRU (default): use pre-computed GEE assets ─────────────────────────────
-  // Reference GEE assets (update these with your project paths)
-  const hlzIII = ee.Image('projects/ee-philaudebert/assets/HoldridgeLifeZones/HLZIII_1995-2024_CRU409');
-  const hlzII = ee.Image('projects/ee-philaudebert/assets/HoldridgeLifeZones/HLZII_1995-2024_CRU409');
-  const gez = ee.Image('projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GlobalEcologicalZones_HLZI_1995-2024_CRU409');
-  const gcz = ee.Image('projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GlobalClimateZones_1995-2024_CRU409');
+  // ── CRU: compute HLZ III on-the-fly from CRU TS assets, derive others by lookup ──
+  const hlzImageCRU = computeHLZ_CRU(CRU_ZONE_START, CRU_ZONE_END);
 
-  // Query GCZ
-  const gczResult = await new Promise((resolve, reject) => {
-    gcz.reduceRegion({
+  const hlzResultCRU = await new Promise((resolve, reject) => {
+    hlzImageCRU.reduceRegion({
       reducer: ee.Reducer.first(),
       geometry: point,
-      scale: 30,
-      bestEffort: true
+      scale: 1000,
+      bestEffort: true,
     }).evaluate((result, err) => {
       if (err) reject(err);
       else resolve(result);
     });
   });
-
-  const valueGcz = gczResult ? gczResult.remapped : null;
-  const labelGcz = valueGcz !== null ? labelMap_gcz[valueGcz] : 'No data';
-
-  // Query GEZ
-  const gezResult = await new Promise((resolve, reject) => {
-    gez.reduceRegion({
-      reducer: ee.Reducer.first(),
-      geometry: point,
-      scale: 30,
-      bestEffort: true
-    }).evaluate((result, err) => {
-      if (err) reject(err);
-      else resolve(result);
-    });
-  });
-
-  const valueGez = gezResult ? gezResult.remapped : null;
-  const labelGez = valueGez !== null ? labelMap_gez[valueGez] : 'No data';
-  const gezCode = valueGez !== null ? formatGEZCode(valueGez) : 'No data';
-
-  // Query HLZ II
-  const hlzIIResult = await new Promise((resolve, reject) => {
-    hlzII.reduceRegion({
-      reducer: ee.Reducer.first(),
-      geometry: point,
-      scale: 30,
-      bestEffort: true
-    }).evaluate((result, err) => {
-      if (err) reject(err);
-      else resolve(result);
-    });
-  });
-
-  const valueHlzII = hlzIIResult ? hlzIIResult.remapped : null;
-  const labelHlzII = valueHlzII !== null ? labelMap_hlzII[valueHlzII] : 'No data';
-
-  // Query HLZ III
-  const hlzIIIResult = await new Promise((resolve, reject) => {
-    hlzIII.select('biotemperature').reduceRegion({
-      reducer: ee.Reducer.first(),
-      geometry: point,
-      scale: 30,
-      bestEffort: true
-    }).evaluate((result, err) => {
-      if (err) reject(err);
-      else resolve(result);
-    });
-  });
-
-  const valueHlzIII = hlzIIIResult ? hlzIIIResult.biotemperature : null;
-  const labelHlzIII = valueHlzIII !== null ? labelMap_hlzIII[valueHlzIII] : 'No data';
 
   const soilResult = await soilResultPromise;
 
-  let valueSoil = null;
-  if (soilResult) {
-    for (const k in soilResult) { valueSoil = soilResult[k]; break; }
+  let valueHlzIII = null;
+  if (hlzResultCRU) {
+    for (const k in hlzResultCRU) { valueHlzIII = hlzResultCRU[k]; break; }
   }
+  const labelHlzIII = valueHlzIII !== null ? labelMap_hlzIII[valueHlzIII] : 'No data';
+
+  const valueGcz  = valueHlzIII !== null ? (GCZ_LOOKUP[valueHlzIII]  ?? null) : null;
+  const valueGez  = valueHlzIII !== null ? (GEZ_LOOKUP[valueHlzIII]  ?? null) : null;
+  const valueHlzII = valueHlzIII !== null ? (HLZII_LOOKUP[valueHlzIII] ?? null) : null;
+
+  const labelGcz  = valueGcz  !== null ? labelMap_gcz[valueGcz]  : 'No data';
+  const labelGez  = valueGez  !== null ? labelMap_gez[valueGez]  : 'No data';
+  const gezCode   = valueGez  !== null ? formatGEZCode(valueGez) : 'No data';
+  const labelHlzII = valueHlzII !== null ? labelMap_hlzII[valueHlzII] : 'No data';
+
+  let valueSoil = null;
+  if (soilResult) { for (const k in soilResult) { valueSoil = soilResult[k]; break; } }
   const labelSoil = valueSoil !== null ? labelMap_soil[valueSoil] : 'No data';
 
   return {
-    lon,
-    lat,
-    dataset: 'cru',
-    gcz: {
-      value: valueGcz,
-      label: labelGcz,
-    },
-    gez: {
-      value: valueGez,
-      label: labelGez,
-      code: gezCode,
-    },
-    hlzII: {
-      value: valueHlzII,
-      label: labelHlzII,
-    },
-    hlzIII: {
-      value: valueHlzIII,
-      label: labelHlzIII,
-    },
-    soil: {
-      value: valueSoil,
-      label: labelSoil,
-    },
+    lon, lat, dataset: 'cru',
+    gcz:   { value: valueGcz,    label: labelGcz },
+    gez:   { value: valueGez,    label: labelGez, code: gezCode },
+    hlzII: { value: valueHlzII,  label: labelHlzII },
+    hlzIII:{ value: valueHlzIII, label: labelHlzIII },
+    soil:  { value: valueSoil,   label: labelSoil },
   };
 }
 

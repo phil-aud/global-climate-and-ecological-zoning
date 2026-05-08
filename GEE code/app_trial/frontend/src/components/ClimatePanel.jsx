@@ -16,19 +16,25 @@ function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, o
 
   // Track the years + dataset used for the last fetch so changes also trigger a refetch
   const lastFetch = useRef(null);
+  // Generation counter: incremented on every new fetch; used to discard stale responses
+  const fetchGen = useRef(0);
 
   // Reset year range min when dataset changes (clamp startYear if needed)
+  // Also clear stale local state immediately so the old dataset's data doesn't persist
   useEffect(() => {
     if (startYear < minYear) setStartYear(minYear);
+    setAnnualSummary(null);
+    setMonthlyData(null);
   }, [dataset]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchClimateData = useCallback(async (lon, lat, start, end) => {
+    const gen = ++fetchGen.current;
     try {
       onLoadingChange(true);
       onError(null);
 
-      const bioStart = dataset === 'terraclimate' ? 1995 : 1995;
-      const bioEnd   = dataset === 'terraclimate' ? 2024 : 2024;
+      const bioStart = 1995;
+      const bioEnd   = 2024;
 
       const [annual, bio, monthly] = await Promise.all([
         getAnnualSummary(lon, lat, start, end, dataset),
@@ -36,15 +42,19 @@ function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, o
         getMonthlyClimate(lon, lat, start, end, dataset),
       ]);
 
+      // Discard if a newer fetch has already started (race condition guard)
+      if (gen !== fetchGen.current) return;
+
       setAnnualSummary(annual);
       setMonthlyData(monthly);
       onClimateDataUpdate({ annual, bio, monthly });
     } catch (err) {
+      if (gen !== fetchGen.current) return;
       onError(err.message);
       setAnnualSummary(null);
       setMonthlyData(null);
     } finally {
-      onLoadingChange(false);
+      if (gen === fetchGen.current) onLoadingChange(false);
     }
   }, [onLoadingChange, onError, onClimateDataUpdate, dataset]);
 

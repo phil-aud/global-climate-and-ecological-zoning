@@ -5,7 +5,7 @@
  */
 
 const ee = require('@google/earthengine');
-const { tcMonthlyMeanTemp, tcMonthlyMeanPre, TC_MIN_YEAR: TC_MIN, TC_MAX_YEAR: TC_MAX } = require('./tcHelpers');
+const { tcMonthlyMeanTemp, tcMonthlyMeanPre, TC_MIN_YEAR: TC_MIN, TC_MAX_YEAR: TC_MAX, TC_COLLECTION } = require('./tcHelpers');
 
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -36,45 +36,35 @@ async function getMonthlyClimate(lon, lat, startYear, endYear, dataset = 'cru') 
     const monthlyTempIC = tcMonthlyMeanTemp(startYear, endYear);
     const monthlyPreIC  = tcMonthlyMeanPre(startYear, endYear);
 
-    // Sample all 12 monthly mean temperature images
-    const tempList  = monthlyTempIC.toList(12);
-    const preList   = monthlyPreIC.toList(12);
-
-    const monthlyData = [];
+    // Build a single 24-band image (t0…t11, p0…p11) and do ONE reduceRegion call
+    // instead of 24 sequential GEE evaluate() calls (one per month per variable).
+    const tempList = monthlyTempIC.toList(12);
+    const preList  = monthlyPreIC.toList(12);
+    const bandImgs = [];
     for (let m = 0; m < 12; m++) {
-      const tImg = ee.Image(tempList.get(m));
-      const pImg = ee.Image(preList.get(m));
-
-      const [tResult, pResult] = await Promise.all([
-        new Promise((resolve, reject) => {
-          tImg.reduceRegion({
-            reducer: ee.Reducer.first(),
-            geometry: point,
-            scale: 1000,
-            bestEffort: true,
-          }).evaluate((r, err) => err ? reject(new Error(err)) : resolve(r));
-        }),
-        new Promise((resolve, reject) => {
-          pImg.reduceRegion({
-            reducer: ee.Reducer.first(),
-            geometry: point,
-            scale: 1000,
-            bestEffort: true,
-          }).evaluate((r, err) => err ? reject(new Error(err)) : resolve(r));
-        }),
-      ]);
-
-      let tVal = null, pVal = null;
-      if (tResult) for (const k in tResult) { tVal = tResult[k]; break; }
-      if (pResult) for (const k in pResult) { pVal = pResult[k]; break; }
-
-      monthlyData.push({
-        month: MONTH_NAMES[m],
-        temperature:   tVal !== null ? Number(Number(tVal).toFixed(2)) : null,
-        precipitation: pVal !== null ? Number(Number(pVal).toFixed(2)) : null,
-      });
+      bandImgs.push(ee.Image(tempList.get(m)).rename(`t${m}`));
+      bandImgs.push(ee.Image(preList.get(m)).rename(`p${m}`));
     }
-    return monthlyData;
+    const combined = ee.Image.cat(bandImgs);
+
+    const result = await new Promise((resolve, reject) => {
+      const tcNativeProj = ee.ImageCollection(TC_COLLECTION).first().select('pr').projection();
+      combined.reduceRegion({
+        reducer: ee.Reducer.first(),
+        geometry: point,
+        scale: tcNativeProj.nominalScale(),
+        crs: tcNativeProj,
+        bestEffort: true,
+      }).evaluate((r, err) => err ? reject(new Error(err)) : resolve(r));
+    });
+
+    if (!result) throw new Error('No data available at this location for the specified years');
+
+    return MONTH_NAMES.map((month, m) => ({
+      month,
+      temperature:   result[`t${m}`] != null ? Number(Number(result[`t${m}`]).toFixed(2)) : null,
+      precipitation: result[`p${m}`] != null ? Number(Number(result[`p${m}`]).toFixed(2)) : null,
+    }));
   }
 
   // ── CRU (default) ───────────────────────────────────────────────────────────

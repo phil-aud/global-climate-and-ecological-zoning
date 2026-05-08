@@ -69,13 +69,20 @@ async function queryZones(lon, lat, dataset = 'cru') {
     // ── TerraClimate: compute HLZ III on-the-fly, derive others by JS lookup ──
     const hlzImage = computeHLZ(TC_ZONE_START, TC_ZONE_END);
 
+    // Use the HLZ image's native projection and integer values when sampling
+    // so the returned code matches the map tile rendering (avoids resampling
+    // artefacts or fractional values).
+    const hlzImageInt = hlzImage.toInt();
+
+    // Use TerraClimate native projection/scale to match getMapTiles sampling
+    const tcNativeProj = ee.ImageCollection(TC_COLLECTION).first().select('pr').projection();
+
+    // Sample the HLZ image at 30m (same as soil) to match the pattern overlay
     const hlzResult = await new Promise((resolve, reject) => {
-      const tcNativeProj = ee.ImageCollection(TC_COLLECTION).first().select('pr').projection();
-      hlzImage.reduceRegion({
+      hlzImageInt.reduceRegion({
         reducer: ee.Reducer.first(),
         geometry: point,
-        scale: tcNativeProj.nominalScale(),
-        crs: tcNativeProj,
+        scale: 30,
         bestEffort: true,
       }).evaluate((result, err) => {
         if (err) reject(err);

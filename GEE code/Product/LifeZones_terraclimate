@@ -587,7 +587,7 @@ var hlz = function(startYear, endYear) {
   return lifeZones;
 };
 
-//Map.addLayer(hlz(1991, 2020), {min: 100, max: 711}, 'HLZ TerraClimate 1991-2020', 0);
+//Map.addLayer(hlz(1995, 2024), {min: 100, max: 711}, 'HLZ TerraClimate 1995-2024', 0);
 
 
 exports = {

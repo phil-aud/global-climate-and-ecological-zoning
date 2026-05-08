@@ -81,7 +81,7 @@ var cruTsTmp = ee.Image("users/philipaudebert/CRU/CRU407_1901-2022/cru_ts405_190
 // Time series of CRU monthly precipitation bands since 1901
 var cruTsPre = ee.Image("users/philipaudebert/CRU/CRU407_1901-2022/cru_ts405_1901-2022_pre");
 var elevation = ee.Image("USGS/GTOPO30").rename('elevation').select('elevation');
-Map.addLayer(bioTemp(cruTsTmp, elevation,  1991,2020))
+Map.addLayer(bioTemp(cruTsTmp, elevation,  1995,2024))
 */
 
 exports = {

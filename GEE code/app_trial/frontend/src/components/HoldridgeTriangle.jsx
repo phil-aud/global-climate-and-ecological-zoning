@@ -313,7 +313,7 @@ function HoldridgeTriangle({ bioData, imgSrc, hideReference = false, title = 'Ho
 
   // Reference biotemperature line — driven by bioData, computed in pyramid1.svg coordinate space
   const refBiotempLine = useMemo(() => {
-    const tBioSL = parseFloat(bioData?.tBio0);          // t0Bio — sea-level value for triangle axis
+    const tBioSL = parseFloat(bioData?.t0Bio);          // t0Bio — sea-level value for triangle axis
     const tBioElev = parseFloat(bioData?.biotemperature); // actual tBio at elevation — for label
     if (!tBioSL || isNaN(tBioSL)) return null;
     // Extend geometric progression one octave past 24° → 48°
@@ -331,7 +331,7 @@ function HoldridgeTriangle({ bioData, imgSrc, hideReference = false, title = 'Ho
     const x2 = IMG_APEX.x + (IMG_BR.x - IMG_APEX.x) * t;
     const labelBt = !isNaN(tBioElev) ? tBioElev : tBioSL;
     return { x1, y1: yClipped, x2, y2: yClipped, label: `${Math.round(labelBt * 10) / 10}° (tBio)` };
-  }, [bioData?.tBio0, bioData?.biotemperature]);
+  }, [bioData?.t0Bio, bioData?.biotemperature]);
 
   // Reference precipitation line — diagonal parallel to LEFT side (60° from base)
   // Precipitation tick marks are along the BASE of the triangle in pyramid1.svg.

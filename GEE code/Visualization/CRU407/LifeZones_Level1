@@ -78,7 +78,7 @@ var gez2023 = function (startYear, endYear) {
     ]);
     return hlzc
 };
-//Map.addLayer(gez2023(1991, 2020), {}, 'final', 0); 
+//Map.addLayer(gez2023(1995, 2024), {}, 'final', 0); 
 
 var sld_intervals =
 '<RasterSymbolizer>' +
@@ -122,7 +122,7 @@ var sld_intervals =
 //Map.addLayer(gez2023(1901, 1930).sldStyle(sld_intervals), {}, 'HLZ - Level1');
 //Map.addLayer(gez2023(1931, 1960).sldStyle(sld_intervals), {}, 'HLZ - Level1');
 //Map.addLayer(gez2023(1961, 1990).sldStyle(sld_intervals), {}, 'HLZ - Level1');
-Map.addLayer(gez2023(1991, 2020).sldStyle(sld_intervals), {}, 'HLZ - Level1');
+Map.addLayer(gez2023(1995, 2024).sldStyle(sld_intervals), {}, 'HLZ - Level1');
 
 //// Create Legend
 
@@ -201,8 +201,8 @@ Map.add(createLegend());
 /*
 var region = ee.Geometry.Rectangle([-180, -90, 180, 90]);
 Export.image.toDrive({
-  image: gez2023(1991, 2020),
-  description: 'gez2023',
+  image: gez2023(1995, 2024),
+  description: 'gez2023_1995-2024',
   scale: 1000,
   fileFormat: 'GeoTIFF',
   maxPixels: 1e13

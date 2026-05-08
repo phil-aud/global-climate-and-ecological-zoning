@@ -1,0 +1,8 @@
+# Google Cloud service account credentials
+*.json
+
+# Node
+node_modules/
+
+# Logs
+*.log

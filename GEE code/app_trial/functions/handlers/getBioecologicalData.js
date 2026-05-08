@@ -18,9 +18,8 @@
  */
 
 const ee = require('@google/earthengine');
-const { tcMonthlyMeanTemp, tcMonthlyMeanPre, tcAnnualMeanPet, TC_MIN_YEAR: TC_MIN, TC_MAX_YEAR: TC_MAX } = require('./tcHelpers');
+const { tcMonthlyMeanTemp, tcMonthlyMeanPre, tcAnnualMeanPet, TC_MIN_YEAR: TC_MIN, TC_MAX_YEAR: TC_MAX, TC_COLLECTION } = require('./tcHelpers');
 
-const TC_COLLECTION = 'IDAHO_EPSCOR/TERRACLIMATE';
 const CRU_MIN_YEAR = 1901;
 const CRU_MAX_YEAR = 2024;
 
@@ -64,78 +63,75 @@ async function getBioecologicalData(lon, lat, startYear, endYear, dataset = 'cru
     const point = ee.Geometry.Point([lon, lat]);
     const elevation = ee.Image('USGS/GTOPO30').rename('elevation').select('elevation');
 
-    // Build monthly mean images (12 images)
     const monthlyTempIC = tcMonthlyMeanTemp(startYear, endYear);
     const monthlyPreIC  = tcMonthlyMeanPre(startYear, endYear);
     const annualPetImg  = tcAnnualMeanPet(startYear, endYear);
 
-    // Mean annual precipitation = sum of 12 monthly means
-    const preImg = monthlyPreIC.sum().rename('precipitation');
-
-    // Annual PET ratio
-    const petRatioImg = annualPetImg.divide(preImg).rename('petRatio');
-
-    // Biotemperature: clamp monthly means [0, 30], average
-    const monthlyTempList = monthlyTempIC.toList(12);
-    const bioImages = [];
+    // Stack all 12 monthly temp + 12 monthly precip + annual PET into one multi-band image
+    // and sample in a SINGLE reduceRegion call using the native TC projection obtained from
+    // a raw (unprocessed) TerraClimate image.  Computing tBio as a derived GEE image
+    // (filter→map→mean→IC.fromImages→sum→divide) loses the native projection, causing
+    // reduceRegion to sample the wrong pixel (e.g. nearby low-elevation coastal value).
+    // Sampling the raw monthly means preserves the correct pixel grid.
+    const tempList = monthlyTempIC.toList(12);
+    const preList  = monthlyPreIC.toList(12);
+    const bandImgs = [];
     for (let m = 0; m < 12; m++) {
-      const img = ee.Image(monthlyTempList.get(m));
-      bioImages.push(
-        img.gt(30).multiply(30)
-          .add(img.lte(30).multiply(img.gt(0)).multiply(img))
-          .rename('biotemperature')
-      );
+      bandImgs.push(ee.Image(tempList.get(m)).rename(`tmp${m}`));
+      bandImgs.push(ee.Image(preList.get(m)).rename(`pre${m}`));
     }
-    const tBio = ee.ImageCollection.fromImages(bioImages).sum().divide(12);
+    bandImgs.push(annualPetImg.rename('pet'));
+    const combined = ee.Image.cat(bandImgs);
 
-    // Sample at native TerraClimate projection and scale (~4638 m).
-    const tcProj = ee.Image(monthlyTempIC.first()).projection();
-    const samplingImage = tBio.rename('biotemperature')
-      .addBands(preImg)
-      .addBands(petRatioImg);
+    // Native TC projection from a raw (unprocessed) TC image — preserves pixel alignment.
+    const tcNativeProj = ee.ImageCollection(TC_COLLECTION).first().select('pr').projection();
 
-    const climateResult = await new Promise((resolve, reject) => {
-      samplingImage.reduceRegion({
-        reducer: ee.Reducer.first(),
-        geometry: point,
-        scale: tcProj.nominalScale(),
-        crs: tcProj,
-        bestEffort: true,
-      }).evaluate((r, err) => {
-        if (err) reject(new Error(err));
-        else resolve(r);
-      });
-    });
+    const [climResult, elevResult] = await Promise.all([
+      new Promise((resolve, reject) => {
+        combined.reduceRegion({
+          reducer: ee.Reducer.first(),
+          geometry: point,
+          scale: tcNativeProj.nominalScale(),
+          crs: tcNativeProj,
+          bestEffort: true,
+        }).evaluate((r, err) => err ? reject(new Error(err)) : resolve(r));
+      }),
+      new Promise((resolve, reject) => {
+        elevation.reduceRegion({
+          reducer: ee.Reducer.first(),
+          geometry: point,
+          scale: elevation.projection().nominalScale(),
+          crs: elevation.projection(),
+          bestEffort: true,
+        }).evaluate((r, err) => err ? reject(new Error(err)) : resolve(r));
+      }),
+    ]);
 
-    const elevResult = await new Promise((resolve, reject) => {
-      elevation.reduceRegion({
-        reducer: ee.Reducer.first(),
-        geometry: point,
-        scale: elevation.projection().nominalScale(),
-        crs: elevation.projection(),
-        bestEffort: true,
-      }).evaluate((r, err) => {
-        if (err) reject(new Error(err));
-        else resolve(r);
-      });
-    });
-
-    const result = Object.assign({}, climateResult, elevResult);
-    if (!result || result.biotemperature == null) {
+    if (!climResult || climResult.tmp0 == null) {
       throw new Error('No data available at this location for the specified years');
     }
 
-    const tBioVal  = result.biotemperature;
-    const elevVal   = result.elevation ?? 0;
+    // Compute biotemperature, precipitation, and PET ratio in JS from the sampled raw values.
+    let tBioSum = 0;
+    let precip  = 0;
+    for (let m = 0; m < 12; m++) {
+      tBioSum += Math.max(0, Math.min(30, climResult[`tmp${m}`] ?? 0));
+      precip  += climResult[`pre${m}`] ?? 0;
+    }
+    const tBioVal  = tBioSum / 12;
+    const petVal   = climResult['pet'] ?? 0;
+    const petRatio = precip > 0 ? petVal / precip : 0;
+
+    const elevVal   = elevResult?.elevation ?? 0;
     const lapseRate = 6 * Math.cos(lat * Math.PI / 180);
     const t0BioVal  = tBioVal > 0 ? tBioVal + (elevVal / 1000) * lapseRate : tBioVal;
 
     return {
       biotemperature: Number(tBioVal.toFixed(2)),   // tBio at actual elevation
       tBio0:          Number(t0BioVal.toFixed(2)),  // sea-level corrected (t0Bio)
-      precipitation:  Number(Number(result.precipitation).toFixed(2)),
-      petRatio:       Number(Number(result.petRatio).toFixed(2)),
-      elevation:      Number(Number(elevVal).toFixed(2)),
+      precipitation:  Number(precip.toFixed(2)),
+      petRatio:       Number(petRatio.toFixed(2)),
+      elevation:      Number(elevVal.toFixed(2)),
       frostDays:      null,  // TerraClimate has no frost-days band
     };
   }

@@ -3,7 +3,7 @@
  * Displays GCZ, GEZ, HLZ II, HLZ III results
  */
 
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { queryZones } from '../utils/api';
 import HoldridgeTriangle from './HoldridgeTriangle';
 import GlobalClimateZonesTriangle from './GlobalClimateZonesTriangle';
@@ -53,17 +53,24 @@ function ZonePanel({ coords, zoneData, bioData, onCoordsChange, onZoneDataUpdate
     return () => window.removeEventListener('keydown', onKey);
   }, [altBeltsExpanded]);
 
+  // Generation counter: incremented on every new fetch; used to discard stale responses
+  const fetchGen = useRef(0);
+
   const fetchZoneData = useCallback(async (lon, lat) => {
+    const gen = ++fetchGen.current;
     try {
       onLoadingChange(true);
       onError(null);
       const data = await queryZones(lon, lat, dataset);
+      // Discard if a newer fetch has already started (race condition guard)
+      if (gen !== fetchGen.current) return;
       onZoneDataUpdate(data);
     } catch (err) {
+      if (gen !== fetchGen.current) return;
       onError(err.message);
       onZoneDataUpdate(null);
     } finally {
-      onLoadingChange(false);
+      if (gen === fetchGen.current) onLoadingChange(false);
     }
   }, [onLoadingChange, onError, onZoneDataUpdate, dataset]);
 

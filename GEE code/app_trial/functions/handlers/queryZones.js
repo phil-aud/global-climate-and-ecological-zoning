@@ -23,6 +23,7 @@ const {
   GCZ_LOOKUP,
   GEZ_LOOKUP,
   HLZII_LOOKUP,
+  TC_COLLECTION,
 } = require('./tcHelpers');
 
 // Default period used for TerraClimate zone classification
@@ -69,10 +70,12 @@ async function queryZones(lon, lat, dataset = 'cru') {
     const hlzImage = computeHLZ(TC_ZONE_START, TC_ZONE_END);
 
     const hlzResult = await new Promise((resolve, reject) => {
+      const tcNativeProj = ee.ImageCollection(TC_COLLECTION).first().select('pr').projection();
       hlzImage.reduceRegion({
         reducer: ee.Reducer.first(),
         geometry: point,
-        scale: 1000,
+        scale: tcNativeProj.nominalScale(),
+        crs: tcNativeProj,
         bestEffort: true,
       }).evaluate((result, err) => {
         if (err) reject(err);

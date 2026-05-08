@@ -5,7 +5,7 @@
  */
 
 const ee = require('@google/earthengine');
-const { tcMonthlyMeanTemp, tcMonthlyMeanPre, TC_MIN_YEAR: TC_MIN, TC_MAX_YEAR: TC_MAX } = require('./tcHelpers');
+const { tcMonthlyMeanTemp, tcMonthlyMeanPre, TC_MIN_YEAR: TC_MIN, TC_MAX_YEAR: TC_MAX, TC_COLLECTION } = require('./tcHelpers');
 
 const CRU_MIN_YEAR = 1901;
 const CRU_MAX_YEAR = 2024;
@@ -34,20 +34,26 @@ async function getAnnualSummary(lon, lat, startYear, endYear, dataset = 'cru') {
     }
     const point = ee.Geometry.Point([lon, lat]);
 
-    // Monthly mean images (12 images each)
     const monthlyTempIC = tcMonthlyMeanTemp(startYear, endYear);
     const monthlyPreIC  = tcMonthlyMeanPre(startYear, endYear);
 
-    // MAT = mean of 12 monthly mean temperatures
-    const matImg = monthlyTempIC.mean().rename('mat');
-    // MAP = sum of 12 monthly mean precipitation values
-    const mapImg = monthlyPreIC.sum().rename('map');
+    // Sample raw monthly means (not derived images) using the native TC projection.
+    const tempList = monthlyTempIC.toList(12);
+    const preList  = monthlyPreIC.toList(12);
+    const bandImgs = [];
+    for (let m = 0; m < 12; m++) {
+      bandImgs.push(ee.Image(tempList.get(m)).rename(`t${m}`));
+      bandImgs.push(ee.Image(preList.get(m)).rename(`p${m}`));
+    }
+    const combined = ee.Image.cat(bandImgs);
+    const tcNativeProj = ee.ImageCollection(TC_COLLECTION).first().select('pr').projection();
 
     const result = await new Promise((resolve, reject) => {
-      matImg.addBands(mapImg).reduceRegion({
+      combined.reduceRegion({
         reducer: ee.Reducer.first(),
         geometry: point,
-        scale: 1000,
+        scale: tcNativeProj.nominalScale(),
+        crs: tcNativeProj,
         bestEffort: true,
       }).evaluate((r, err) => {
         if (err) reject(new Error(err));
@@ -55,12 +61,18 @@ async function getAnnualSummary(lon, lat, startYear, endYear, dataset = 'cru') {
       });
     });
 
-    if (!result || result.mat == null || result.map == null) {
+    if (!result || result.t0 == null) {
       throw new Error('No data available at this location for the specified years');
     }
+    // MAT = mean of 12 monthly temps; MAP = sum of 12 monthly precips (computed in JS)
+    let matSum = 0, mapSum = 0;
+    for (let m = 0; m < 12; m++) {
+      matSum += result[`t${m}`] ?? 0;
+      mapSum += result[`p${m}`] ?? 0;
+    }
     return {
-      meanAnnualTemp:   Number(Number(result.mat).toFixed(2)),
-      meanAnnualPrecip: Number(Number(result.map).toFixed(2)),
+      meanAnnualTemp:   Number((matSum / 12).toFixed(2)),
+      meanAnnualPrecip: Number(mapSum.toFixed(2)),
     };
   }
 

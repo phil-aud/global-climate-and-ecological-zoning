@@ -1,5 +1,5 @@
 # Google Cloud service account credentials
-*.json
+ee-philaudebert-*.json
 
 # Node
 node_modules/

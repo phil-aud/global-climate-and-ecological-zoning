@@ -4,11 +4,11 @@
  * Supports 'cru' (default) and 'terraclimate' datasets.
  *
  * For CRU:
- *   Mirrors climDat() from App_product.js (GEE source), but computes the lapse-rate
- *   correction numerically (in JS) rather than as a GEE image expression. This avoids
- *   GTOPO30 being resampled to the CRU sampling scale (5 km) during reduceRegion, which
- *   would yield a different elevation—and therefore a different t0Bio—than GEE's code
- *   editor, which samples elevation at native GTOPO30 resolution (~927 m).
+ *   tBio = mean annual biotemperature at actual elevation: monthly CRU temps clamped to
+ *   [0, 30] °C, averaged over 12 months. Sampled at scale: 5000 (matching App_GEZGCZ.js).
+ *   t0Bio = sea-level biotemperature: tBio + (tBio > 0) * (elevation/1000) * 6*cos(lat),
+ *   where elevation is sampled from GTOPO30 at its native scale (~927 m) and the lapse
+ *   rate 6·cos(lat) °C/km is computed in JS from the requested latitude.
  *
  * For TerraClimate:
  *   Uses IDAHO_EPSCOR/TERRACLIMATE collection. Mean temp = (tmmn + tmmx) × 0.05.
@@ -88,6 +88,8 @@ async function getBioecologicalData(lon, lat, startYear, endYear, dataset = 'cru
     }
     const tBio = ee.ImageCollection.fromImages(bioImages).sum().divide(12);
 
+    // Sample at native TerraClimate projection and scale (~4638 m).
+    const tcProj = ee.Image(monthlyTempIC.first()).projection();
     const samplingImage = tBio.rename('biotemperature')
       .addBands(preImg)
       .addBands(petRatioImg);
@@ -96,7 +98,8 @@ async function getBioecologicalData(lon, lat, startYear, endYear, dataset = 'cru
       samplingImage.reduceRegion({
         reducer: ee.Reducer.first(),
         geometry: point,
-        scale: 1000,
+        scale: tcProj.nominalScale(),
+        crs: tcProj,
         bestEffort: true,
       }).evaluate((r, err) => {
         if (err) reject(new Error(err));
@@ -128,7 +131,8 @@ async function getBioecologicalData(lon, lat, startYear, endYear, dataset = 'cru
     const t0BioVal  = tBioVal > 0 ? tBioVal + (elevVal / 1000) * lapseRate : tBioVal;
 
     return {
-      biotemperature: Number(t0BioVal.toFixed(2)),
+      biotemperature: Number(tBioVal.toFixed(2)),   // tBio at actual elevation
+      tBio0:          Number(t0BioVal.toFixed(2)),  // sea-level corrected (t0Bio)
       precipitation:  Number(Number(result.precipitation).toFixed(2)),
       petRatio:       Number(Number(result.petRatio).toFixed(2)),
       elevation:      Number(Number(elevVal).toFixed(2)),
@@ -187,46 +191,25 @@ async function getBioecologicalData(lon, lat, startYear, endYear, dataset = 'cru
   const elevationBands = elevation.rename('elevation');
 
   // Derguy et al. 2019 clamping — mirrors jan/feb/.../dec in climDat() exactly.
-  // Use JS Array.map() so each month image is explicitly constructed and renamed.
   const monthlyBioImages = monthlyTmpImages.map(function(img) {
     return img.gt(30).multiply(30)
       .add(img.lte(30).multiply(img.gt(0)).multiply(img))
       .rename('biotemperature');
   });
 
-  // Mean annual biotemperature at actual elevation (no lapse-rate correction yet).
-  // This is sampled from CRU data only, keeping the elevation out of the image expression
-  // so that GTOPO30 is not resampled to the CRU sampling scale.
+  // tBio = mean annual biotemperature at actual elevation (no lapse-rate correction).
+  // Elevation is kept OUT of the image expression so GEE samples only CRU data here.
   const tBio = ee.ImageCollection.fromImages(monthlyBioImages).sum().divide(12);
 
-  // Assemble the sampling image (climate bands at CRU/5 km scale, NO lapse-rate correction)
   const annualFrostDays = ee.ImageCollection.fromImages(monthlyFrsImages).sum().rename('frostDays');
 
-  // DEBUG: sample each month's raw temperature (before clamping)
-  const debugMonthlyTemps = await new Promise((resolve, reject) => {
-    const debugBands = monthlyTmpImages.map((img, i) => img.rename(`m${i}`));
-    const debugImg = debugBands.reduce((acc, img) => acc ? acc.addBands(img) : img);
-    debugImg.reduceRegion({
-      reducer: ee.Reducer.first(),
-      geometry: point,
-      scale: cruTsTmp.projection().nominalScale(),
-      crs: cruTsTmp.projection(),
-      bestEffort: true,
-    }).evaluate((r, err) => err ? reject(new Error(err)) : resolve(r));
-  });
-  console.log('[getBioecologicalData] monthly raw temps:', JSON.stringify(debugMonthlyTemps));
-
+  // Sample tBio + precipitation + PET at native CRU projection and scale (~55 km).
+  const cruProj = cruTsTmp.projection();
   const samplingImage = tBio.rename('biotemperature')
     .addBands(preBands)
     .addBands(petRatioBands)
     .addBands(annualFrostDays);
 
-  // Sample climate at native CRU projection and scale.
-  // Using scale: 5000 without specifying the CRS causes GEE to resample the ~55 km CRU
-  // pixels onto a 5 km grid, which can interpolate across pixel boundaries and hit a
-  // different CRU cell than GEE's code editor.  Sampling at native CRU scale/projection
-  // matches the raw pixel value, consistent with GEE Inspector and the code-editor result.
-  const cruProj = cruTsTmp.projection();
   const climateResult = await new Promise((resolve, reject) => {
     samplingImage.reduceRegion({
       reducer: ee.Reducer.first(),
@@ -240,11 +223,7 @@ async function getBioecologicalData(lon, lat, startYear, endYear, dataset = 'cru
     });
   });
 
-  // Sample elevation separately at native GTOPO30 CRS and nominalScale (~927 m).
-  // This matches GEE's:  elevation.reduceRegion({ scale: elevation.projection().nominalScale(),
-  //                                               crs:   elevation.projection(), ... })
-  // and avoids the ~6 m bias that results from using an arbitrary scale without the
-  // native projection.
+  // Sample elevation separately at native GTOPO30 resolution (~927 m).
   const elevResult = await new Promise((resolve, reject) => {
     elevationBands.reduceRegion({
       reducer: ee.Reducer.first(),
@@ -260,22 +239,21 @@ async function getBioecologicalData(lon, lat, startYear, endYear, dataset = 'cru
 
   const result = Object.assign({}, climateResult, elevResult);
 
-  console.log('[getBioecologicalData] raw result:', JSON.stringify(result));
-
   if (!result || result.biotemperature == null) {
     throw new Error('No data available at this location for the specified years');
   }
 
-  const tBioVal = result.biotemperature;  // tBio at actual elevation (CRU-only, no lapse-rate)
+  const tBioVal = result.biotemperature;  // tBio at actual elevation
   const elevVal  = result.elevation ?? 0;
 
-  // Compute sea-level biotemperature (t0Bio) numerically using the native-scale elevation.
-  // Formula: t0Bio = tBio + (tBio > 0) * (elevation / 1000) * 6·cos(lat)
+  // t0Bio = sea-level biotemperature using dynamic lapse rate: 6·cos(lat) °C/km.
+  // Only applied where tBio > 0 (avoids skewing cold/frozen locations).
   const lapseRate = 6 * Math.cos(lat * Math.PI / 180);
-  const t0BioVal = tBioVal > 0 ? tBioVal + (elevVal / 1000) * lapseRate : tBioVal;
+  const t0BioVal  = tBioVal > 0 ? tBioVal + (elevVal / 1000) * lapseRate : tBioVal;
 
   return {
-    biotemperature: Number(t0BioVal.toFixed(2)),  // sea-level corrected (t0Bio)
+    biotemperature: Number(tBioVal.toFixed(2)),   // tBio at actual elevation
+    tBio0:          Number(t0BioVal.toFixed(2)),  // sea-level corrected (t0Bio)
     precipitation:  Number(Number(result.precipitation).toFixed(2)),
     petRatio:       Number(Number(result.petRatio).toFixed(2)),
     elevation:      Number(Number(elevVal).toFixed(2)),

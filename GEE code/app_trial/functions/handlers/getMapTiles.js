@@ -8,6 +8,7 @@
 const { getEarthEngine } = require('../services/geeClient');
 const {
   computeHLZ,
+  computeHLZ_CRU,
   HLZ_FROM,
   GCZ_TO,
   GEZ_TO,
@@ -17,6 +18,10 @@ const {
 // Default period for TerraClimate tiles
 const TC_TILE_START = 1995;
 const TC_TILE_END   = 2024;
+
+// Default period for CRU tiles
+const CRU_TILE_START = 1995;
+const CRU_TILE_END   = 2024;
 
 // ── SLD styles (match the GEE visualization scripts in Visualization/CRU409/) ──
 
@@ -479,22 +484,26 @@ async function getMapTiles(req, res) {
       });
     }
 
-    // ── CRU (default): use pre-computed GEE assets ───────────────────────────
-    const hlzIIIImage = ee.Image(ASSETS.hlzIII).select('biotemperature');
-    const hlzIIIPatternImage = hlzIIIImage.remap(HLZIII_FROM_VALUES, HLZIII_TO_PATTERNS, 0);
+    // ── CRU (default): compute on-the-fly using same formula as inspector ────
+    // Using computeHLZ_CRU ensures the map tiles use the exact same lapse-rate
+    // formula (6·cos(lat) °C/km) and data as getBioecologicalData.js.
+    const hlzImageCRU = computeHLZ_CRU(CRU_TILE_START, CRU_TILE_END);
+
+    const gczImageCRU   = hlzImageCRU.remap(HLZ_FROM, GCZ_TO,  0);
+    const gezImageCRU   = hlzImageCRU.remap(HLZ_FROM, GEZ_TO,  0);
+    const hlzIIImageCRU = hlzImageCRU.remap(HLZ_FROM, HLZII_TO, 0);
+    const hlzIIIPatternImage = hlzImageCRU.remap(HLZIII_FROM_VALUES, HLZIII_TO_PATTERNS, 0);
 
     const [gczMapId, gezMapId, hlzIIMapId, hlzIIIMapId, hlzIIIPatternMapId, soilMapId] = await Promise.all([
-      getMapId(ee.Image(ASSETS.gcz).select('remapped').sldStyle(SLD_GCZ)),
-      getMapId(ee.Image(ASSETS.gez).select('remapped').sldStyle(SLD_GEZ)),
-      getMapId(ee.Image(ASSETS.hlzII).select('remapped').sldStyle(SLD_HLZII)),
-      getMapId(hlzIIIImage.sldStyle(SLD_HLZIII)),
+      getMapId(gczImageCRU.sldStyle(SLD_GCZ)),
+      getMapId(gezImageCRU.sldStyle(SLD_GEZ)),
+      getMapId(hlzIIImageCRU.sldStyle(SLD_HLZII)),
+      getMapId(hlzImageCRU.sldStyle(SLD_HLZIII)),
       getMapId(hlzIIIPatternImage.sldStyle(SLD_HLZIII_PATTERN)),
       // Soil: remap original codes to 1..8 classes to match frontend palette
       getMapId(ee.Image(ASSETS.soil).remap([1,2,3,4,5,6,7,8,9,10,11,12,13],[7,1,2,8,7,4,8,3,8,5,6,8,8]).sldStyle(SLD_SOIL)),
     ]);
 
-    // Log mapId shapes for debugging: some EE client versions provide a urlFormat
-    // without an accompanying token; log the objects so we can inspect fields.
     try {
       console.log('getMapTiles mapIds:', {
         gcz: { mapid: gczMapId.mapid, token: gczMapId.token, urlFormat: gczMapId.urlFormat },

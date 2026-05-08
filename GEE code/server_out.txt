@@ -1,0 +1,2 @@
+Backend server running on http://localhost:5002
+API base: http://localhost:5002/climate-and-ecological-zoning/us-central1

@@ -22,7 +22,7 @@ function ZonePanel({ coords, zoneData, bioData, onCoordsChange, onZoneDataUpdate
   //   When frost line applies and seaLevelBT is in the 12–24°C band, the dot is
   //   placed at the 18°C boundary; a ghost dot shows the geometric sea-level position.
   const altMarker = useMemo(() => {
-    const seaLevelBT = parseFloat(bioData?.biotemperature); // t0Bio from backend
+    const seaLevelBT = parseFloat(bioData?.tBio0); // t0Bio from backend
     const elev = parseFloat(bioData?.elevation);
     const frostDays = parseFloat(bioData?.frostDays); // mean annual frost days (GEE: cruFrsMonthlyMean().sum())
     if (isNaN(seaLevelBT) || isNaN(elev)) return null;
@@ -44,7 +44,7 @@ function ZonePanel({ coords, zoneData, bioData, onCoordsChange, onZoneDataUpdate
       : null;
 
     return { x: xMain, y, xGhost, frostLineApplies };
-  }, [bioData?.biotemperature, bioData?.elevation, bioData?.frostDays]);
+  }, [bioData?.tBio0, bioData?.elevation, bioData?.frostDays]);
 
   useEffect(() => {
     if (!altBeltsExpanded) return;
@@ -121,12 +121,12 @@ function ZonePanel({ coords, zoneData, bioData, onCoordsChange, onZoneDataUpdate
       <div className="bio-summary">
         <p>
           <strong>Mean annual biotemperature (tBio):</strong>{' '}
-          {bioData?.biotemperature != null && bioData?.elevation != null
-            ? `${Math.round((bioData.biotemperature - (bioData.elevation * 6 / 1000)) * 100) / 100}°C`
+          {bioData?.biotemperature != null
+            ? `${bioData.biotemperature}°C`
             : '—'}
         </p>
         <p>
-          <strong><em>Mean annual biotemperature (tBio) at sea-level:</em></strong> <em>{bioData?.biotemperature ?? '—'}°C</em>
+          <strong><em>Mean annual biotemperature (tBio) at sea-level:</em></strong> <em>{bioData?.tBio0 ?? '—'}°C</em>
         </p>
         <p>
           <strong>Mean annual precipitation (P):</strong> {bioData?.precipitation ?? '—'} mm

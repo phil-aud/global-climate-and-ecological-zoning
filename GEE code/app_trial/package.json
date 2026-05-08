@@ -1,0 +1,22 @@
+{
+  "name": "gee-app-trial",
+  "version": "1.0.0",
+  "description": "Standalone web app for querying Climate & Ecological Zones",
+  "private": true,
+  "scripts": {
+    "start": "concurrently \"npm run backend\" \"npm run frontend\"",
+    "dev": "concurrently \"npm run backend\" \"npm run frontend\"",
+    "backend": "cd functions && npm run serve",
+    "backend:local": "cd functions && npm start",
+    "start:local": "concurrently \"npm run backend:local\" \"npm run frontend\"",
+    "frontend": "cd frontend && npm start",
+    "build": "cd frontend && npm run build",
+    "deploy": "npm run build && firebase deploy --only hosting,functions",
+    "deploy:hosting": "npm run build && firebase deploy --only hosting",
+    "deploy:functions": "firebase deploy --only functions",
+    "deploy:functions:debug": "firebase deploy --only functions --debug"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

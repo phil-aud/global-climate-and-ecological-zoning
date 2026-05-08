@@ -1,0 +1,256 @@
+/**
+ * Main App Component
+ */
+
+import React, { useState, useCallback } from 'react';
+import MapComponent from './components/MapComponent';
+import ZonePanel from './components/ZonePanel';
+import SoilsPanel from './components/SoilsPanel';
+import ClimatePanel from './components/ClimatePanel';
+import './styles/App.css';
+
+function App() {
+  const [selectedCoords, setSelectedCoords] = useState(null);
+  const [zoneData, setZoneData] = useState(null);
+  const [climateData, setClimateData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [dataset, setDataset] = useState('cru');
+
+  const handleDatasetChange = useCallback((newDataset) => {
+    if (newDataset === dataset) return;
+    setDataset(newDataset);
+    setZoneData(null);
+    setClimateData(null);
+  }, [dataset]);
+
+  const handleMapClick = useCallback((lon, lat) => {
+    setSelectedCoords({ lon, lat });
+    setError(null);
+  }, []);
+
+  const handleCoordinatesChange = useCallback((lon, lat) => {
+    setSelectedCoords({ lon, lat });
+  }, []);
+
+  function buildSummary() {
+    const lines = [];
+    lines.push('Global Climate & Ecological Zones — Point Summary');
+    lines.push('='.repeat(50));
+    if (selectedCoords) {
+      lines.push(`Coordinates: ${selectedCoords.lon.toFixed(4)}°E, ${selectedCoords.lat.toFixed(4)}°N`);
+    } else {
+      lines.push('Coordinates: (none)');
+    }
+    lines.push('');
+
+    if (zoneData) {
+      lines.push('TIER 1: Climate & Ecological Zones');
+      lines.push(`  GCZ:      ${zoneData.gcz.label} (${zoneData.gcz.value})`);
+      lines.push(`  GEZ:      ${zoneData.gez.label} (${zoneData.gez.code})`);
+      lines.push(`  HLZ II:   ${zoneData.hlzII.label} (${zoneData.hlzII.value})`);
+      lines.push(`  HLZ III:  ${zoneData.hlzIII.label} (${zoneData.hlzIII.value})`);
+    }
+
+    if (climateData?.bio) {
+      const { biotemperature, precipitation, petRatio, elevation } = climateData.bio;
+      lines.push('');
+      lines.push('BIOCLIMATIC PARAMETERS');
+      lines.push(`  Mean annual biotemperature (tBio): ${biotemperature} °C`);
+      lines.push(`  Mean annual precipitation (P):     ${precipitation} mm`);
+      lines.push(`  PET ratio (R):                     ${petRatio}`);
+      lines.push(`  Elevation:                         ${elevation} m`);
+    }
+
+    if (climateData?.annual) {
+      const { meanAnnualTemp, meanAnnualPrecip } = climateData.annual;
+      lines.push('');
+      lines.push('TIER 1b: Temperature & Precipitation');
+      lines.push(`  Mean annual temperature (MAT): ${meanAnnualTemp} °C`);
+      lines.push(`  Mean annual precipitation (MAP): ${meanAnnualPrecip} mm`);
+    }
+
+    lines.push('');
+    lines.push(`Exported: ${new Date().toISOString()}`);
+    return lines.join('\n');
+  }
+
+  function handleCopy() {
+    if (!zoneData && !climateData) return;
+    navigator.clipboard.writeText(buildSummary()).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    });
+  }
+
+  const hasData = !!(zoneData || climateData);
+
+  const [panelVisible, setPanelVisible] = React.useState(true);
+  const [localLon, setLocalLon] = React.useState('');
+  const [localLat, setLocalLat] = React.useState('');
+
+  React.useEffect(() => {
+    if (selectedCoords) {
+      setLocalLon(selectedCoords.lon);
+      setLocalLat(selectedCoords.lat);
+    }
+  }, [selectedCoords]);
+
+  function handleCoordInput(field, value) {
+    const num = parseFloat(value);
+    if (field === 'lon') {
+      setLocalLon(value);
+      if (!isNaN(num) && !isNaN(parseFloat(localLat))) {
+        handleCoordinatesChange(num, parseFloat(localLat));
+      }
+    } else {
+      setLocalLat(value);
+      if (!isNaN(num) && !isNaN(parseFloat(localLon))) {
+        handleCoordinatesChange(parseFloat(localLon), num);
+      }
+    }
+  }
+
+  return (
+    <div className="app-container">
+      <div className="map-container">
+        <MapComponent
+          onMapClick={handleMapClick}
+          selectedCoords={selectedCoords}
+          zoneData={zoneData}
+          panelVisible={panelVisible}
+          onPanelToggle={() => setPanelVisible(v => !v)}
+          dataset={dataset}
+        />
+      </div>
+      
+      <div className={`panel-container${panelVisible ? '' : ' panel-container--hidden'}`}>
+        <div className="panel-header">
+          <h1 title="IPCC land stratification for National Greenhouse Gas Inventories (NGGI)">IPCC land stratification for National Greenhouse Gas Inventories <span className="nggi">(NGGI)</span></h1>
+        </div>
+
+        {/* previous explorer placeholder moved below coordinates (rendered as subtitle) */}
+
+        <div className="shared-coords">
+          <p className="shared-coords-hint">Click on the map or enter coordinates to query climate and ecological zone data</p>
+          <div className="coords-input">
+            <label>
+              Lon:
+              <input
+                type="number"
+                min="-180"
+                max="180"
+                step="0.0001"
+                value={localLon}
+                onChange={(e) => handleCoordInput('lon', e.target.value)}
+              />
+            </label>
+            <label>
+              Lat:
+              <input
+                type="number"
+                min="-90"
+                max="90"
+                step="0.0001"
+                value={localLat}
+                onChange={(e) => handleCoordInput('lat', e.target.value)}
+              />
+            </label>
+          </div>
+        </div>
+
+        {/* Explorer section: subtitle + Tier 1 and Tier 1b panels */}
+        <div className="explorer-section">
+          <div className="subtitle" role="note" aria-label="Previous Explorer Subtitle">
+            <div className="subtitle-banner">
+              <span className="subtitle-left">EXPLORER</span>
+              <span className="subtitle-right">Climate &amp; Ecological Zones</span>
+            </div>
+          </div>
+
+          {error && (
+            <div className="error-message">
+              <strong>Error:</strong> {error}
+            </div>
+          )}
+
+          {/* Dataset selector */}
+          <div className="dataset-selector">
+            <button
+              className={`dataset-btn${dataset === 'cru' ? ' dataset-btn--active' : ''}`}
+              onClick={() => handleDatasetChange('cru')}
+            >
+              CRU (55 km)
+            </button>
+            <button
+              className={`dataset-btn${dataset === 'terraclimate' ? ' dataset-btn--active' : ''}`}
+              onClick={() => handleDatasetChange('terraclimate')}
+            >
+              TerraClimate (5 km)
+            </button>
+          </div>
+
+          <ZonePanel
+            coords={selectedCoords}
+            zoneData={zoneData}
+            bioData={climateData?.bio}
+            onCoordsChange={handleCoordinatesChange}
+            onZoneDataUpdate={setZoneData}
+            loading={loading}
+            onLoadingChange={setLoading}
+            onError={setError}
+            dataset={dataset}
+          />
+
+          <ClimatePanel
+            coords={selectedCoords}
+            onClimateDataUpdate={setClimateData}
+            bioData={climateData?.bio}
+            loading={loading}
+            onLoadingChange={setLoading}
+            onError={setError}
+            dataset={dataset}
+          />
+        </div>
+
+        {/* EXPLORER Soils section */}
+        <div className="explorer-section explorer-section--spaced-bottom" style={{ marginTop: 12 }}>
+          <div className="subtitle" role="note" aria-label="Soils Explorer Subtitle">
+            <div className="subtitle-banner">
+              <span className="subtitle-left">EXPLORER</span>
+              <span className="subtitle-right">Soils</span>
+            </div>
+          </div>
+
+          <SoilsPanel
+            coords={selectedCoords}
+            zoneData={zoneData}
+          />
+        </div>
+
+        <div className="panel-footer">
+          <div className="footer-copy-row">
+            <div className="footer-copy-info">
+              <span className="footer-copy-title">Export point summary</span>
+              <span className="footer-copy-sub">
+                {hasData
+                  ? (selectedCoords ? `${selectedCoords.lon.toFixed(4)}°E, ${selectedCoords.lat.toFixed(4)}°N` : 'Click the map to load data')
+                  : 'Click the map to load data'}
+              </span>
+            </div>
+            <button
+              className={`footer-copy-btn${copied ? ' footer-copy-btn--done' : ''}`}
+              onClick={handleCopy}
+              disabled={!hasData}
+            >
+              {copied ? '✓ Copied' : 'Copy all outputs'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default App;

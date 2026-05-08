@@ -1,0 +1,25 @@
+{
+  "name": "gee-functions-trial",
+  "version": "1.0.0",
+  "description": "Firebase Cloud Functions for GEE queries",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js",
+    "serve": "firebase emulators:start --only functions",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "dependencies": {
+    "firebase-functions": "^4.4.0",
+    "firebase-admin": "^12.0.0",
+    "@google/earthengine": "^0.1.380",
+    "cors": "^2.8.5",
+    "dotenv": "^16.1.4"
+  },
+  "devDependencies": {
+    "firebase-functions-test": "^3.1.0"
+  },
+  "engines": {
+    "node": "20"
+  }
+}

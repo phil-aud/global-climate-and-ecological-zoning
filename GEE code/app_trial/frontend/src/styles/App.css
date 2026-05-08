@@ -1,0 +1,747 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+/* ── Design tokens ──────────────────────────────────────── */
+:root {
+  --navy:        #002147;
+  --navy-light:  #1a3a5c;
+  --white:       #ffffff;
+  --bg:          #f5f7fa;
+  --bg-card:     #ffffff;
+  --border:      #e2e8f0;
+  --text-dark:   #0f172a;
+  --text-mid:    #475569;
+  --text-light:  #94a3b8;
+  --accent:      #002147;
+  --error-bg:    #fff1f2;
+  --error-border:#e11d48;
+  --error-text:  #be123c;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text-dark);
+}
+
+/* ── Layout ─────────────────────────────────────────────── */
+.app-container {
+  display: flex;
+  width: 100%;
+  height: 100vh;
+}
+
+.map-container {
+  flex: 1;
+  position: relative;
+  background: #e8ecf0;
+  overflow: hidden;
+}
+
+.panel-container {
+  width: 420px;
+  min-width: 420px;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  box-shadow: -4px 0 20px rgba(0, 33, 71, 0.08);
+  transition: width 0.25s ease, min-width 0.25s ease;
+}
+
+.panel-container--hidden {
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  border-left: none;
+  box-shadow: none;
+}
+
+/* ── Panel toggle button (sits on right edge of map) ─────── */
+/* ── Panel header (dark navy brand bar) ─────────────────── */
+.panel-header {
+  padding: 24px 20px 20px;
+  background: var(--navy);
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.panel-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 100%);
+}
+
+.panel-header h1 {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--white);
+  margin: 0;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+  text-transform: none;
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* ── Error banner ───────────────────────────────────────── */
+.error-message {
+  padding: 10px 16px;
+  background: var(--error-bg);
+  color: var(--error-text);
+  border-left: 3px solid var(--error-border);
+  margin: 12px 16px 0;
+  font-size: 12px;
+  border-radius: 4px;
+}
+
+/* ── Section panels ─────────────────────────────────────── */
+.zone-panel,
+.climate-panel {
+  padding: 16px 16px 14px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Panel title (Tier badge + subtitle) ────────────────── */
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-desc {
+  margin: 8px 0 12px;
+  font-size: 12px;
+  color: var(--text-mid);
+  line-height: 1.4;
+}
+
+.panel-desc a {
+  color: var(--navy);
+  text-decoration: underline;
+}
+
+/* ── Previous explorer panel alignment with app panels ───────────────── */
+.previous-explorer {
+  margin: 10px 16px 0;
+  padding: 0; /* panel-title provides padding */
+  border-radius: 8px;
+  overflow: visible;
+}
+
+.previous-explorer .panel-title {
+  padding: 14px 16px;
+  border-bottom: none;
+}
+
+.previous-explorer .tier-badge {
+  background: linear-gradient(180deg, var(--navy), var(--navy-light));
+}
+
+.previous-explorer .tier-label {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--navy);
+}
+
+.previous-explorer .panel-desc {
+  margin: 6px 0 0;
+  color: var(--text-mid);
+}
+
+.tier-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 4px 10px;
+  background: var(--navy);
+  color: var(--white);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 4px;
+}
+
+.tier-badge--b {
+  background: var(--navy-light);
+}
+
+.tier-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--navy);
+  letter-spacing: 0.01em;
+  line-height: 1.3;
+}
+
+/* Subtitle element placed below coordinates */
+.subtitle {
+  margin: 20px 16px 0;
+  padding: 0;
+}
+
+/* Add white spacing above and below subtitle blocks that need isolation */
+.subtitle--spaced {
+  margin: 16px 0;
+  background: var(--bg-card);
+  padding: 12px 16px;
+}
+
+/* Explorer section wraps the subtitle + Tier panels (Tier 1 + Tier 1b) */
+
+.explorer-section {
+  margin: 20px 8px 0;
+  border: 1px solid rgba(0,33,71,0.12);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(26,58,92,0.03), rgba(26,58,92,0.01));
+  overflow: visible; /* allow inner graphics to extend outside when needed */
+}
+
+.explorer-section--spaced-bottom {
+  margin-bottom: 20px;
+}
+
+.explorer-section .subtitle {
+  margin: 0; /* subtitle lives inside box */
+}
+
+.explorer-section .subtitle-banner {
+  width: 100%; /* match explorer-section width */
+  margin-left: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.explorer-section .subtitle-right {
+  background: var(--navy-light);
+  color: rgba(255,255,255,0.95);
+}
+
+.explorer-section .zone-panel,
+.explorer-section .climate-panel {
+  background: transparent;
+  border-bottom: none;
+  padding: 12px 16px 14px;
+}
+
+/* ── Dataset selector ──────────────────────────────────────────────────────── */
+.dataset-selector {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px 2px;
+}
+
+.dataset-btn {
+  flex: 1;
+  padding: 6px 12px;
+  border: 1.5px solid rgba(0,33,71,0.25);
+  border-radius: 6px;
+  background: #fff;
+  color: #1a3a5c;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.dataset-btn:hover {
+  border-color: #1a3a5c;
+  background: rgba(0,33,71,0.06);
+}
+
+.dataset-btn--active {
+  background: #1a3a5c;
+  border-color: #1a3a5c;
+  color: #fff;
+}
+
+.subtitle-banner {
+  display: flex;
+  align-items: stretch;
+  width: calc(100% + 16px);
+  margin-left: -8px;
+  overflow: hidden;
+}
+
+.subtitle-left {
+  display: flex;
+  align-items: center;
+  padding: 9px 14px;
+  background: var(--navy);
+  color: var(--white);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+  border-top-left-radius: 8px;
+}
+
+.subtitle-right {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  padding: 9px 14px;
+  background: var(--navy-light);
+  color: rgba(255,255,255,0.88);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-top-right-radius: 8px;
+}
+
+.panel-header .nggi {
+  font-weight: 800;
+}
+
+/* Subsubtitle: used for tier labels to indicate lower hierarchy */
+.subsubtitle {
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: var(--navy) !important;
+  opacity: 0.95;
+}
+
+/* ── Shared coordinate bar ──────────────────────────────── */
+.shared-coords {
+  padding: 12px 16px 14px;
+  background: var(--navy-light);
+  border-bottom: 2px solid var(--border);
+}
+
+.shared-coords-hint {
+  margin: 0 0 10px 0;
+  font-size: 11px;
+  color: rgba(255,255,255,0.6);
+  font-weight: 400;
+}
+
+/* ── Coordinate & year inputs ───────────────────────────── */
+.coords-input,
+.climate-inputs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.climate-inputs {
+  margin-bottom: 14px;
+}
+
+.coords-input label,
+.climate-inputs label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.75);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.coords-input input,
+.climate-inputs input {
+  padding: 6px 10px;
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  width: 100px;
+  background: rgba(255,255,255,0.1);
+  color: var(--white);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.coords-input input::placeholder {
+  color: rgba(255,255,255,0.35);
+}
+
+.coords-input input:focus {
+  outline: none;
+  border-color: rgba(255,255,255,0.6);
+  background: rgba(255,255,255,0.18);
+}
+
+.climate-inputs input {
+  color: var(--text-dark);
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.climate-inputs label {
+  color: var(--text-mid);
+}
+
+.climate-inputs input:focus {
+  outline: none;
+  border-color: var(--navy);
+  background: var(--white);
+}
+
+/* ── Loading indicator ──────────────────────────────────── */
+.loading {
+  padding: 10px 14px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+  margin: 0 0 10px;
+  letter-spacing: 0.02em;
+}
+
+/* ── Zone result rows ───────────────────────────────────── */
+.zone-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.zone-row {
+  display: flex;
+  align-items: stretch;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.zone-label {
+  font-weight: 700;
+  color: var(--text-mid);
+  min-width: 90px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border-right: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.zone-value {
+  flex: 1;
+  color: var(--text-dark);
+  padding: 8px 12px;
+  background: var(--white);
+  display: flex;
+  align-items: center;
+  font-weight: 500;
+  font-size: 12px;
+}
+
+/* Zone panel emphasis */
+.zone-panel {
+  background: linear-gradient(180deg, rgba(0,33,71,0.02), var(--bg-card));
+  border: 1px solid rgba(0,33,71,0.06);
+  box-shadow: 0 6px 18px rgba(0,33,71,0.04);
+}
+
+/* Highlighted rows (GCZ, GEZ) */
+.zone-row--highlight {
+  border-color: var(--navy);
+  box-shadow: 0 2px 8px rgba(0,33,71,0.06);
+}
+
+.zone-row--highlight .zone-label {
+  background: var(--navy);
+  color: rgba(255,255,255,0.95);
+  border-right-color: rgba(255,255,255,0.12);
+  font-size: 12px;
+}
+
+.zone-row--highlight .zone-value {
+  background: var(--navy-light);
+  color: var(--white);
+  font-weight: 800;
+  font-size: 12px;
+}
+
+.zone-row--highlight::before {
+  content: '';
+  display: block;
+  width: 6px;
+  background: var(--accent);
+}
+
+/* ── Bio / Annual summary data rows ─────────────────────── */
+.annual-summary,
+.bio-summary {
+  margin: 6px 0 0;
+  border: none;
+  border-radius: 0;
+  overflow: visible;
+  background: transparent;
+  padding-left: 6px;
+  border-left: 3px solid #2d3748;
+}
+
+.annual-summary p,
+.bio-summary p {
+  margin: 0;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text-mid);
+  border-bottom: none;
+  display: flex;
+  justify-content: space-between;
+  line-height: 1.15;
+}
+
+.annual-summary p:last-child,
+.bio-summary p:last-child {
+  border-bottom: none;
+}
+
+.annual-summary p strong,
+.bio-summary p strong {
+  color: var(--text-mid);
+  font-weight: 400;
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0.01em;
+  flex-shrink: 0;
+  margin-right: 6px;
+}
+
+.annual-summary {
+  background: var(--bg);
+  opacity: 0.92;
+}
+
+/* ── Per-section source notes ──────────────────────────────────────── */
+.panel-sources {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.sources-title {
+  margin: 0 0 4px 0;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-mid);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.panel-sources ul {
+  margin: 0;
+  padding-left: 14px;
+  list-style: disc;
+}
+
+.panel-sources li {
+  font-size: 10px;
+  color: var(--text-light);
+  line-height: 1.6;
+  margin: 2px 0;
+}
+
+/* ── Chart ──────────────────────────────────────────────── */
+.chart-container {
+  position: relative;
+  height: 240px;
+  margin: 14px 0 0;
+  padding: 10px 6px 6px;
+  background: var(--bg);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+/* ── Footer ─────────────────────────────────────────────── */
+.panel-footer {
+  padding: 14px 16px;
+  background: var(--navy);
+  border-top: none;
+  margin-top: auto;
+  flex-shrink: 0;
+}
+
+.footer-copy-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.footer-copy-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.footer-copy-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.9);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.footer-copy-sub {
+  font-size: 11px;
+  color: rgba(255,255,255,0.45);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.footer-copy-btn {
+  flex-shrink: 0;
+  padding: 7px 18px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 6px;
+  color: rgba(255,255,255,0.85);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  letter-spacing: 0.03em;
+}
+
+.footer-copy-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.6);
+  color: #fff;
+}
+
+.footer-copy-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.footer-copy-btn--done {
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.5);
+  color: #fff;
+}
+
+/* ── Responsive ─────────────────────────────────────────── */
+
+/* ── Pyramids group (grey rounded wrapper for all three pyramids) ─── */
+.pyramids-group {
+  margin: 14px 0 0;
+  padding: 12px 12px 8px;
+  background: #e4e7ec;
+  border-radius: 10px;
+}
+
+/* ── Pyramid subsection title (replaces panel-title+badge for pyramids) ── */
+.pyramid-subsection-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.pyramid-subsection-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--navy);
+  letter-spacing: 0.01em;
+}
+
+/* ── Holdridge Triangle ─────────────────────────────────── */
+.holdridge-triangle-container {
+  margin: 10px 0 0;
+  padding: 10px 8px;
+  background: var(--bg-card);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.holdridge-triangle-container:first-child {
+  margin-top: 0;
+}
+
+.hlz-maximize-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-secondary, #666);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 3px 6px;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.hlz-maximize-btn:hover {
+  background: var(--border);
+  color: var(--text, #222);
+}
+
+.hlz-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.hlz-modal-content {
+  position: relative;
+  background: var(--bg, #fff);
+  border-radius: 8px;
+  padding: 12px;
+  max-width: 95vw;
+  max-height: 95vh;
+  overflow: auto;
+  width: min(900px, 95vw);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+}
+
+.hlz-modal-close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: var(--text, #333);
+  line-height: 1;
+  z-index: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+.hlz-modal-close:hover {
+  background: rgba(0,0,0,0.08);
+}
+
+/* ── Responsive ─────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .app-container { flex-direction: column; }
+  .map-container { height: 40%; }
+  .panel-container { width: 100%; min-width: unset; height: 60%; }
+}
+

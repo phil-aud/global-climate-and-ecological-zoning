@@ -1,0 +1,508 @@
+/////////////////////////////////////////////////////////////////////////////
+/////////////////////////// Holdridge Life Zones/////////////////////////////
+/////////////////////////////////////////////////////////////////////////////
+//
+// Self-contained: no require() needed. Paste directly into GEE Code Editor.
+//
+// Dataset: TerraClimate (IDAHO_EPSCOR/TERRACLIMATE)
+// Classification: Holdridge Life Zone ecology (Holdridge 1967)
+// https://reddcr.go.cr/sites/default/files/centro-de-documentacion/holdridge_1966_-_life_zone_ecology.pdf
+//
+// Level 2 = HLZ aggregated by latitudinal region × moisture class (2-digit codes)
+//   Tens digit  = latitudinal region (1=Tropical … 7=Polar)
+//   Units digit = moisture class (1=rain forest … 7/8=desert)
+//
+// Band mapping:
+//   pr   → precipitation (mm/month, scale 1)
+//   pet  → reference evapotranspiration (mm/month, scale 0.1)
+//   tmmn → min temperature (°C, scale 0.1)
+//   tmmx → max temperature (°C, scale 0.1)   → mean = (tmmn + tmmx) × 0.05
+//
+// Frost line: a pixel has frost if any individual monthly tmmn < 0°C in the period.
+// Subtropical = no frost; Warm Temperate = at least one month with tmmn < 0.
+//
+// TerraClimate availability: 1958–present.
+
+// =========================================================================
+// Configuration — edit these to change the period
+// =========================================================================
+var START_YEAR = 1991;
+var END_YEAR   = 2020;
+
+// =========================================================================
+// Datasets
+// =========================================================================
+var terraClimate = ee.ImageCollection("IDAHO_EPSCOR/TERRACLIMATE");
+var elevation    = ee.Image("USGS/GTOPO30");
+
+// =========================================================================
+// Climate data helpers
+// =========================================================================
+
+// 12-image IC: monthly mean temperature (°C) = (tmmn + tmmx) × 0.05
+var tcMonthlyMeanTemp = function(startYear, endYear) {
+  var filtered = terraClimate
+    .filter(ee.Filter.calendarRange(startYear, endYear, 'year'))
+    .map(function(img) {
+      return img.select('tmmn').add(img.select('tmmx'))
+                .multiply(0.05).rename('tmp')
+                .copyProperties(img, ['system:time_start']);
+    });
+  return ee.ImageCollection(ee.List.sequence(1, 12).map(function(m) {
+    return filtered.filter(ee.Filter.calendarRange(m, m, 'month')).mean().rename('tmp');
+  }));
+};
+
+// 12-image IC: monthly mean precipitation (mm/month)
+var tcMonthlyMeanPre = function(startYear, endYear) {
+  var filtered = terraClimate
+    .filter(ee.Filter.calendarRange(startYear, endYear, 'year'))
+    .map(function(img) {
+      return img.select('pr').rename('pr').copyProperties(img, ['system:time_start']);
+    });
+  return ee.ImageCollection(ee.List.sequence(1, 12).map(function(m) {
+    return filtered.filter(ee.Filter.calendarRange(m, m, 'month')).mean().rename('pr');
+  }));
+};
+
+// Single-band image: mean annual total PET (mm/year)
+var tcAnnualMeanPet = function(startYear, endYear) {
+  var filtered = terraClimate
+    .filter(ee.Filter.calendarRange(startYear, endYear, 'year'))
+    .map(function(img) {
+      return img.select('pet').multiply(0.1).rename('pet')
+                .copyProperties(img, ['system:time_start']);
+    });
+  return ee.ImageCollection(ee.List.sequence(1, 12).map(function(m) {
+    return filtered.filter(ee.Filter.calendarRange(m, m, 'month')).mean().rename('pet');
+  })).sum();
+};
+
+
+
+// =========================================================================
+// Full HLZ classification (3-digit codes)
+// =========================================================================
+var holdridgeLifeZones = function(startYear, endYear) {
+
+  var tcTemp    = tcMonthlyMeanTemp(startYear, endYear);
+  var tcPre     = tcMonthlyMeanPre(startYear, endYear);
+  var annualPet = tcAnnualMeanPet(startYear, endYear);
+  // -- Biotemperature: clip monthly temp to [0, 30] °C --
+  var tb = tcTemp.toBands();
+  var mmb = function(b) {
+    return tb.select(b).max(ee.Image(0)).min(ee.Image(30)).rename('b');
+  };
+  var tBio = ee.ImageCollection.fromImages([
+    mmb(0), mmb(1), mmb(2), mmb(3), mmb(4),  mmb(5),
+    mmb(6), mmb(7), mmb(8), mmb(9), mmb(10), mmb(11)
+  ]).sum().divide(12);
+
+  // Sea-level biotemperature (6·cos(lat) °C per km elevation, only where tBio > 0)
+  var lapseRate = ee.Image.pixelLonLat().select('latitude')
+                   .multiply(Math.PI / 180).cos().multiply(6);
+  var t0Bio = tBio.add(tBio.gt(0).multiply(elevation.divide(1000).multiply(lapseRate)));
+
+  // -- Frost: any month in the period with monthly mean tmmn < 0°C → frost present --
+  // (If monthly mean tmmn < 0, multiple frost days must have occurred that month)
+  var hasFrost = terraClimate
+    .filter(ee.Filter.calendarRange(startYear, endYear, 'year'))
+    .select('tmmn')
+    .min()
+    .multiply(0.1)
+    .lt(0);
+
+  // -- Latitudinal regions --
+  var tropical      = t0Bio.gte(24);
+  var subtropical   = t0Bio.multiply(hasFrost.not()).gte(12)
+                          .multiply(t0Bio.multiply(hasFrost.not()).lt(24));
+  var warmTemperate = t0Bio.multiply(hasFrost).gte(12)
+                          .multiply(t0Bio.multiply(hasFrost).lt(24));
+  var coolTemperate = t0Bio.gte(6).multiply(t0Bio.lt(12));
+  var boreal        = t0Bio.gte(3).multiply(t0Bio.lt(6));
+  var subpolar      = t0Bio.gte(1.5).multiply(t0Bio.lt(3));
+  var polar         = t0Bio.gte(0).multiply(t0Bio.lt(1.5));
+
+  // -- Altitudinal belts --
+  var el = elevation;
+  var tropicalBasal        = tropical.multiply(el.lte(1000));
+  var tropicalPremontane   = tropical.multiply(el.gt(1000).multiply(el.lte(2000)));
+  var tropicalLowerMontane = tropical.multiply(el.gt(2000).multiply(el.lte(3000)));
+  var tropicalMontane      = tropical.multiply(el.gt(3000).multiply(el.lte(4000)));
+  var tropicalSubalpine    = tropical.multiply(el.gt(4000).multiply(el.lte(4500)));
+  var tropicalAlpine       = tropical.multiply(el.gt(4500).multiply(el.lte(4750)));
+  var tropicalNival        = tropical.multiply(el.gt(4750));
+
+  var subtropicalPremontane   = subtropical.multiply(el.lte(1000));
+  var subtropicalLowerMontane = subtropical.multiply(el.gt(1000).multiply(el.lte(2000)));
+  var subtropicalMontane      = subtropical.multiply(el.gt(2000).multiply(el.lte(3000)));
+  var subtropicalSubalpine    = subtropical.multiply(el.gt(3000).multiply(el.lte(3500)));
+  var subtropicalAlpine       = subtropical.multiply(el.gt(3500).multiply(el.lte(3750)));
+  var subtropicalNival        = subtropical.multiply(el.gt(3750));
+
+  var warmTemperateLowerMontane = warmTemperate.multiply(el.lte(1000));
+  var warmTemperateMontane      = warmTemperate.multiply(el.gt(1000).multiply(el.lte(2000)));
+  var warmTemperateSubalpine    = warmTemperate.multiply(el.gt(2000).multiply(el.lte(2500)));
+  var warmTemperateAlpine       = warmTemperate.multiply(el.gt(2500).multiply(el.lte(2750)));
+  var warmTemperateNival        = warmTemperate.multiply(el.gt(2750));
+
+  var coolTemperateMontane   = coolTemperate.multiply(el.lte(1000));
+  var coolTemperateSubalpine = coolTemperate.multiply(el.gt(1000).multiply(el.lte(1500)));
+  var coolTemperateAlpine    = coolTemperate.multiply(el.gt(1500).multiply(el.lte(1750)));
+  var coolTemperateNival     = coolTemperate.multiply(el.gt(1750));
+
+  var borealSubalpine = boreal.multiply(el.lte(500));
+  var borealAlpine    = boreal.multiply(el.gt(500).multiply(el.lte(750)));
+  var borealNival     = boreal.multiply(el.gt(750));
+
+  var subpolarAlpine = subpolar.multiply(el.lte(250));
+  var subpolarNival  = subpolar.multiply(el.gt(250));
+
+  var polarNival = polar;
+
+  // -- Precipitation & PET ratios --
+  var map       = tcPre.sum().rename('precipitation');
+  var petRatio  = annualPet.divide(map).rename('petRatio');
+  var nMap      = map.divide(62.5).log().divide(ee.Number(2).log()).add(1);
+  var nPetRatio = petRatio.divide(0.125).log().divide(ee.Number(2).log()).add(1);
+
+  var ch = function(petRatioMax) {
+    var nMax = ee.Image(petRatioMax).divide(0.125).log().divide(ee.Image(2).log()).add(1).add(1);
+    return nMap.add(nMax.subtract(nPetRatio)).divide(2);
+  };
+
+  var chT  = ch(32);
+  var chSW = ch(16);
+  var chC  = ch(8);
+  var chB  = ch(4);
+  var chSP = ch(2);
+
+  var tPM = function(belt, v) { return belt.multiply(chSW.gt(v-1).multiply(chSW.lte(v))); };
+
+  return (
+    // Tropical Basal
+    tropicalBasal.multiply(chT.gt(8)).multiply(111)
+    .add(tropicalBasal.multiply(chT.gt(7).multiply(chT.lte(8))).multiply(112))
+    .add(tropicalBasal.multiply(chT.gt(6).multiply(chT.lte(7))).multiply(113))
+    .add(tropicalBasal.multiply(chT.gt(5).multiply(chT.lte(6))).multiply(114))
+    .add(tropicalBasal.multiply(chT.gt(4).multiply(chT.lte(5))).multiply(115))
+    .add(tropicalBasal.multiply(chT.gt(3).multiply(chT.lte(4))).multiply(116))
+    .add(tropicalBasal.multiply(chT.gt(2).multiply(chT.lte(3))).multiply(117))
+    .add(tropicalBasal.multiply(chT.lte(2)).multiply(118))
+    // Tropical Premontane
+    .add(tropicalPremontane.multiply(chSW.gt(7)).multiply(121))
+    .add(tPM(tropicalPremontane, 7).multiply(122))
+    .add(tPM(tropicalPremontane, 6).multiply(123))
+    .add(tPM(tropicalPremontane, 5).multiply(124))
+    .add(tPM(tropicalPremontane, 4).multiply(125))
+    .add(tPM(tropicalPremontane, 3).multiply(126))
+    .add(tropicalPremontane.multiply(chSW.lte(2)).multiply(127))
+    // Tropical Lower Montane
+    .add(tropicalLowerMontane.multiply(chSW.gt(7)).multiply(131))
+    .add(tPM(tropicalLowerMontane, 7).multiply(132))
+    .add(tPM(tropicalLowerMontane, 6).multiply(133))
+    .add(tPM(tropicalLowerMontane, 5).multiply(134))
+    .add(tPM(tropicalLowerMontane, 4).multiply(135))
+    .add(tPM(tropicalLowerMontane, 3).multiply(136))
+    .add(tropicalLowerMontane.multiply(chSW.lte(2)).multiply(137))
+    // Tropical Montane
+    .add(tropicalMontane.multiply(chC.gt(6)).multiply(141))
+    .add(tropicalMontane.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(142))
+    .add(tropicalMontane.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(143))
+    .add(tropicalMontane.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(144))
+    .add(tropicalMontane.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(145))
+    .add(tropicalMontane.multiply(chC.lte(2)).multiply(146))
+    // Tropical Subalpine
+    .add(tropicalSubalpine.multiply(chB.gt(5)).multiply(151))
+    .add(tropicalSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(152))
+    .add(tropicalSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(153))
+    .add(tropicalSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(154))
+    .add(tropicalSubalpine.multiply(chB.lte(2)).multiply(155))
+    // Tropical Alpine
+    .add(tropicalAlpine.multiply(chSP.gt(4)).multiply(161))
+    .add(tropicalAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(162))
+    .add(tropicalAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(163))
+    .add(tropicalAlpine.multiply(chSP.lte(2)).multiply(164))
+    .add(tropicalNival.multiply(171))
+    // Subtropical Premontane
+    .add(subtropicalPremontane.multiply(chSW.gt(7)).multiply(211))
+    .add(tPM(subtropicalPremontane, 7).multiply(212))
+    .add(tPM(subtropicalPremontane, 6).multiply(213))
+    .add(tPM(subtropicalPremontane, 5).multiply(214))
+    .add(tPM(subtropicalPremontane, 4).multiply(215))
+    .add(tPM(subtropicalPremontane, 3).multiply(216))
+    .add(subtropicalPremontane.multiply(chSW.lte(2)).multiply(217))
+    // Subtropical Lower Montane
+    .add(subtropicalLowerMontane.multiply(chSW.gt(7)).multiply(221))
+    .add(tPM(subtropicalLowerMontane, 7).multiply(222))
+    .add(tPM(subtropicalLowerMontane, 6).multiply(223))
+    .add(tPM(subtropicalLowerMontane, 5).multiply(224))
+    .add(tPM(subtropicalLowerMontane, 4).multiply(225))
+    .add(tPM(subtropicalLowerMontane, 3).multiply(226))
+    .add(subtropicalLowerMontane.multiply(chSW.lte(2)).multiply(227))
+    // Subtropical Montane
+    .add(subtropicalMontane.multiply(chC.gt(6)).multiply(231))
+    .add(subtropicalMontane.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(232))
+    .add(subtropicalMontane.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(233))
+    .add(subtropicalMontane.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(234))
+    .add(subtropicalMontane.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(235))
+    .add(subtropicalMontane.multiply(chC.lte(2)).multiply(236))
+    // Subtropical Subalpine
+    .add(subtropicalSubalpine.multiply(chB.gt(5)).multiply(241))
+    .add(subtropicalSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(242))
+    .add(subtropicalSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(243))
+    .add(subtropicalSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(244))
+    .add(subtropicalSubalpine.multiply(chB.lte(2)).multiply(245))
+    // Subtropical Alpine
+    .add(subtropicalAlpine.multiply(chSP.gt(4)).multiply(251))
+    .add(subtropicalAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(252))
+    .add(subtropicalAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(253))
+    .add(subtropicalAlpine.multiply(chSP.lte(2)).multiply(254))
+    .add(subtropicalNival.multiply(261))
+    // Warm Temperate Lower Montane
+    .add(warmTemperateLowerMontane.multiply(chSW.gt(7)).multiply(311))
+    .add(tPM(warmTemperateLowerMontane, 7).multiply(312))
+    .add(tPM(warmTemperateLowerMontane, 6).multiply(313))
+    .add(tPM(warmTemperateLowerMontane, 5).multiply(314))
+    .add(tPM(warmTemperateLowerMontane, 4).multiply(315))
+    .add(tPM(warmTemperateLowerMontane, 3).multiply(316))
+    .add(warmTemperateLowerMontane.multiply(chSW.lte(2)).multiply(317))
+    // Warm Temperate Montane
+    .add(warmTemperateMontane.multiply(chC.gt(6)).multiply(321))
+    .add(warmTemperateMontane.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(322))
+    .add(warmTemperateMontane.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(323))
+    .add(warmTemperateMontane.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(324))
+    .add(warmTemperateMontane.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(325))
+    .add(warmTemperateMontane.multiply(chC.lte(2)).multiply(326))
+    // Warm Temperate Subalpine
+    .add(warmTemperateSubalpine.multiply(chB.gt(5)).multiply(331))
+    .add(warmTemperateSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(332))
+    .add(warmTemperateSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(333))
+    .add(warmTemperateSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(334))
+    .add(warmTemperateSubalpine.multiply(chB.lte(2)).multiply(335))
+    // Warm Temperate Alpine
+    .add(warmTemperateAlpine.multiply(chSP.gt(4)).multiply(341))
+    .add(warmTemperateAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(342))
+    .add(warmTemperateAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(343))
+    .add(warmTemperateAlpine.multiply(chSP.lte(2)).multiply(344))
+    .add(warmTemperateNival.multiply(351))
+    // Cool Temperate Montane
+    .add(coolTemperateMontane.multiply(chC.gt(6)).multiply(411))
+    .add(coolTemperateMontane.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(412))
+    .add(coolTemperateMontane.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(413))
+    .add(coolTemperateMontane.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(414))
+    .add(coolTemperateMontane.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(415))
+    .add(coolTemperateMontane.multiply(chC.lte(2)).multiply(416))
+    // Cool Temperate Subalpine
+    .add(coolTemperateSubalpine.multiply(chB.gt(5)).multiply(421))
+    .add(coolTemperateSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(422))
+    .add(coolTemperateSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(423))
+    .add(coolTemperateSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(424))
+    .add(coolTemperateSubalpine.multiply(chB.lte(2)).multiply(425))
+    // Cool Temperate Alpine
+    .add(coolTemperateAlpine.multiply(chSP.gt(4)).multiply(431))
+    .add(coolTemperateAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(432))
+    .add(coolTemperateAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(433))
+    .add(coolTemperateAlpine.multiply(chSP.lte(2)).multiply(434))
+    .add(coolTemperateNival.multiply(441))
+    // Boreal Subalpine
+    .add(borealSubalpine.multiply(chB.gt(5)).multiply(511))
+    .add(borealSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(512))
+    .add(borealSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(513))
+    .add(borealSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(514))
+    .add(borealSubalpine.multiply(chB.lte(2)).multiply(515))
+    // Boreal Alpine
+    .add(borealAlpine.multiply(chSP.gt(4)).multiply(521))
+    .add(borealAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(522))
+    .add(borealAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(523))
+    .add(borealAlpine.multiply(chSP.lte(2)).multiply(524))
+    .add(borealNival.multiply(531))
+    // Subpolar Alpine
+    .add(subpolarAlpine.multiply(chSP.gt(4)).multiply(611))
+    .add(subpolarAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(612))
+    .add(subpolarAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(613))
+    .add(subpolarAlpine.multiply(chSP.lte(2)).multiply(614))
+    .add(subpolarNival.multiply(621))
+    // Polar
+    .add(polarNival.multiply(711))
+  );
+};
+
+// =========================================================================
+// Remap 3-digit HLZ codes → 2-digit Level 2 codes
+// (tens = latitudinal region, units = moisture class collapsed across altitudinal belts)
+// =========================================================================
+var lv2HLZ = function(startYear, endYear) {
+  return holdridgeLifeZones(startYear, endYear).remap([
+    111, 112, 113, 114, 115, 116, 117, 118,
+    121, 122, 123, 124, 125, 126, 127,
+    131, 132, 133, 134, 135, 136, 137,
+    141, 142, 143, 144, 145, 146,
+    151, 152, 153, 154, 155,
+    161, 162, 163, 164,
+    171,
+    211, 212, 213, 214, 215, 216, 217,
+    221, 222, 223, 224, 225, 226, 227,
+    231, 232, 233, 234, 235, 236,
+    241, 242, 243, 244, 245,
+    251, 252, 253, 254,
+    261,
+    311, 312, 313, 314, 315, 316, 317,
+    321, 322, 323, 324, 325, 326,
+    331, 332, 333, 334, 335,
+    341, 342, 343, 344,
+    351,
+    411, 412, 413, 414, 415, 416,
+    421, 422, 423, 424, 425,
+    431, 432, 433, 434,
+    441,
+    511, 512, 513, 514, 515,
+    521, 522, 523, 524,
+    531,
+    611, 612, 613, 614,
+    621,
+    711,
+  ],
+  [
+    11, 12, 13, 14, 15, 16, 17, 18,
+    21, 22, 23, 24, 25, 26, 27,
+    31, 32, 33, 34, 35, 36, 37,
+    41, 42, 43, 44, 45, 46,
+    51, 52, 53, 54, 55,
+    61, 62, 63, 64,
+    71,
+    21, 22, 23, 24, 25, 26, 27,
+    31, 32, 33, 34, 35, 36, 37,
+    41, 42, 43, 44, 45, 46,
+    51, 52, 53, 54, 55,
+    61, 62, 63, 64,
+    71,
+    31, 32, 33, 34, 35, 36, 37,
+    41, 42, 43, 44, 45, 46,
+    51, 52, 53, 54, 55,
+    61, 62, 63, 64,
+    71,
+    41, 42, 43, 44, 45, 46,
+    51, 52, 53, 54, 55,
+    61, 62, 63, 64,
+    71,
+    51, 52, 53, 54, 55,
+    61, 62, 63, 64,
+    71,
+    61, 62, 63, 64,
+    71,
+    71,
+  ]);
+};
+
+// =========================================================================
+// Visualization
+// =========================================================================
+var sld_intervalsHLZ2 =
+'<RasterSymbolizer>' +
+  '<ColorMap type="intervals" extended="false">' +
+    '<ColorMapEntry color="#ce1d09" quantity="11" label="Tropical rain forest"/>' +
+    '<ColorMapEntry color="#ce1d09" quantity="12" label="Tropical wet forest"/>' +
+    '<ColorMapEntry color="#D53B2A" quantity="13" label="Tropical moist forest"/>' +
+    '<ColorMapEntry color="#DB594B" quantity="14" label="Tropical dry forest"/>' +
+    '<ColorMapEntry color="#E2776B" quantity="15" label="Tropical very dry forest"/>' +
+    '<ColorMapEntry color="#E8968C" quantity="16" label="Tropical thorn woodland"/>' +
+    '<ColorMapEntry color="#EFB4AD" quantity="17" label="Tropical desert scrub"/>' +
+    '<ColorMapEntry color="#F5D2CE" quantity="18" label="Tropical desert"/>' +
+    '<ColorMapEntry color="#f19137" quantity="21" label="Subtropical rain forest"/>' +
+    '<ColorMapEntry color="#F3A052" quantity="22" label="Subtropical wet forest"/>' +
+    '<ColorMapEntry color="#F5AE6C" quantity="23" label="Subtropical moist forest"/>' +
+    '<ColorMapEntry color="#F7BD87" quantity="24" label="Subtropical dry forest"/>' +
+    '<ColorMapEntry color="#F9CCA2" quantity="25" label="Subtropical thorn woodland"/>' +
+    '<ColorMapEntry color="#FADABC" quantity="26" label="Subtropical desert scrub"/>' +
+    '<ColorMapEntry color="#FCE9D7" quantity="27" label="Subtropical desert"/>' +
+    '<ColorMapEntry color="#ffde4a" quantity="31" label="Warm Temperate rain forest"/>' +
+    '<ColorMapEntry color="#FFE262" quantity="32" label="Warm Temperate wet forest"/>' +
+    '<ColorMapEntry color="#FFE77A" quantity="33" label="Warm Temperate moist forest"/>' +
+    '<ColorMapEntry color="#FFEB92" quantity="34" label="Warm Temperate dry forest"/>' +
+    '<ColorMapEntry color="#FFF0AB" quantity="35" label="Warm Temperate thorn woodland"/>' +
+    '<ColorMapEntry color="#FFF4C3" quantity="36" label="Warm Temperate desert scrub"/>' +
+    '<ColorMapEntry color="#FFF8DB" quantity="37" label="Warm Temperate desert"/>' +
+    '<ColorMapEntry color="#9ec200" quantity="41" label="Cool Temperate rain forest"/>' +
+    '<ColorMapEntry color="#AECC29" quantity="42" label="Cool Temperate wet forest"/>' +
+    '<ColorMapEntry color="#BDD652" quantity="43" label="Cool Temperate moist forest"/>' +
+    '<ColorMapEntry color="#CDDF7A" quantity="44" label="Cool Temperate steppe"/>' +
+    '<ColorMapEntry color="#DCE9A3" quantity="45" label="Cool Temperate desert scrub"/>' +
+    '<ColorMapEntry color="#ECF3CC" quantity="46" label="Cool Temperate desert"/>' +
+    '<ColorMapEntry color="#009837" quantity="51" label="Boreal rain forest"/>' +
+    '<ColorMapEntry color="#33AD5F" quantity="52" label="Boreal wet forest"/>' +
+    '<ColorMapEntry color="#66C187" quantity="53" label="Boreal moist forest"/>' +
+    '<ColorMapEntry color="#99D6AF" quantity="54" label="Boreal dry scrub"/>' +
+    '<ColorMapEntry color="#CCEAD7" quantity="55" label="Boreal desert"/>' +
+    '<ColorMapEntry color="#00add6" quantity="61" label="Subpolar rain tundra"/>' +
+    '<ColorMapEntry color="#44C3E1" quantity="62" label="Subpolar wet tundra"/>' +
+    '<ColorMapEntry color="#88D9EC" quantity="63" label="Subpolar moist tundra"/>' +
+    '<ColorMapEntry color="#CCEFF7" quantity="64" label="Subpolar desert"/>' +
+    '<ColorMapEntry color="#1451a0" quantity="71" label="Polar"/>' +
+  '</ColorMap>' +
+'</RasterSymbolizer>';
+
+Map.setCenter(0, 35, 2);
+Map.addLayer(
+  lv2HLZ(START_YEAR, END_YEAR).sldStyle(sld_intervalsHLZ2),
+  {},
+  'Holdridge Life Zones Level 2 - TerraClimate ' + START_YEAR + '-' + END_YEAR
+);
+
+// =========================================================================
+// Legend
+// =========================================================================
+var legend = ui.Panel({ style: { maxHeight: '600px', position: 'bottom-right', padding: '8px 15px' } });
+legend.add(ui.Label({
+  value: 'Holdridge Life Zones (TerraClimate)',
+  style: { fontWeight: 'bold', fontSize: '14px', margin: '0 0 4px 0', padding: '0' }
+}));
+
+var makeRow = function(color, name) {
+  return ui.Panel({
+    widgets: [
+      ui.Label({ style: { backgroundColor: '#' + color, padding: '8px', margin: '0 0 4px 0' } }),
+      ui.Label({ value: name, style: { margin: '0 0 4px 6px' } })
+    ],
+    layout: ui.Panel.Layout.Flow('horizontal')
+  });
+};
+
+var palette = [
+  'ce1d09', 'D53B2A', 'DB594B', 'E2776B', 'E8968C', 'EFB4AD', 'F5D2CE',
+  'f19137', 'F3A052', 'F5AE6C', 'F7BD87', 'F9CCA2', 'FADABC', 'FCE9D7',
+  'ffde4a', 'FFE262', 'FFE77A', 'FFEB92', 'FFF0AB', 'FFF4C3', 'FFF8DB',
+  '9ec200', 'AECC29', 'BDD652', 'CDDF7A', 'DCE9A3', 'ECF3CC',
+  '009837', '33AD5F', '66C187', '99D6AF', 'CCEAD7',
+  '00add6', '44C3E1', '88D9EC', 'CCEFF7',
+  '1451a0'
+];
+var names = [
+  'Tropical rain forest', 'Tropical wet forest', 'Tropical moist forest',
+  'Tropical dry forest', 'Tropical very dry forest', 'Tropical thorn woodland',
+  'Tropical desert scrub', 'Tropical desert',
+  'Subtropical rain forest', 'Subtropical wet forest', 'Subtropical moist forest',
+  'Subtropical dry forest', 'Subtropical thorn woodland', 'Subtropical desert scrub',
+  'Subtropical desert',
+  'Warm Temperate rain forest', 'Warm Temperate wet forest', 'Warm Temperate moist forest',
+  'Warm Temperate dry forest', 'Warm Temperate thorn woodland', 'Warm Temperate desert scrub',
+  'Warm Temperate desert',
+  'Cool Temperate rain forest', 'Cool Temperate wet forest', 'Cool Temperate moist forest',
+  'Cool Temperate steppe', 'Cool Temperate desert scrub', 'Cool Temperate desert',
+  'Boreal rain forest', 'Boreal wet forest', 'Boreal moist forest',
+  'Boreal dry scrub', 'Boreal desert',
+  'Subpolar rain tundra', 'Subpolar wet tundra', 'Subpolar moist tundra', 'Subpolar desert',
+  'Polar'
+];
+for (var i = 0; i < names.length; i++) { legend.add(makeRow(palette[i], names[i])); }
+Map.add(legend);
+
+// =========================================================================
+// Export
+// =========================================================================
+Export.image.toAsset({
+  image: lv2HLZ(START_YEAR, END_YEAR),
+  description: 'HLZ_Level2_TerraClimate_' + START_YEAR + '-' + END_YEAR,
+  scale: 1000,
+  maxPixels: 9e9
+});

@@ -112,7 +112,7 @@ var sld_intervals =
   '</ColorMap>' +
 '</RasterSymbolizer>';
 
-Map.addLayer(gez2023(1991, 2020).sldStyle(sld_intervals), {}, 'HLZ Level 1 (GEZ) - TerraClimate 1991-2020');
+Map.addLayer(gez2023(1995, 2024).sldStyle(sld_intervals), {}, 'HLZ Level 1 (GEZ) - TerraClimate 1995-2024');
 
 //// Legend
 function createLegend() {

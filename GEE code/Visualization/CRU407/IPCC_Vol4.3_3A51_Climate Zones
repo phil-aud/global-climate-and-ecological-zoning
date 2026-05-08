@@ -78,7 +78,7 @@ var gez2023 = function (startYear, endYear) {
     ]);
     return hlzc
 };
-//Map.addLayer(gez2023(1991, 2020), {}, 'final', 0); 
+//Map.addLayer(gez2023(1995, 2024), {}, 'final', 0); 
 
 // Define an SLD style of discrete intervals to apply to the image.
 var sld_intervals =
@@ -100,7 +100,7 @@ var sld_intervals =
 //Map.addLayer(gez2023(1901, 1930).sldStyle(sld_intervals), {}, 'HLZ - Level1');
 //Map.addLayer(gez2023(1931, 1960).sldStyle(sld_intervals), {}, 'HLZ - Level1');
 //Map.addLayer(gez2023(1961, 1990).sldStyle(sld_intervals), {}, 'HLZ - Level1');
-Map.addLayer(gez2023(1991, 2020).sldStyle(sld_intervals), {}, 'IPCC Climate Zones');
+Map.addLayer(gez2023(1995, 2024).sldStyle(sld_intervals), {}, 'IPCC Climate Zones');
 
 //// Create Legend
 
@@ -183,8 +183,8 @@ for (var i = 0; i < 10; i++) {
 Map.add(createLegend());
 
 Export.image.toDrive({
-  image: gez2023(1991, 2020),
-  description: 'IPCC_407_ClimateZones_1991-2020',
+  image: gez2023(1995, 2024),
+  description: 'IPCC_407_ClimateZones_1995-2024',
   scale: 1000,
   fileFormat: 'GeoTIFF',
   maxPixels: 1e13

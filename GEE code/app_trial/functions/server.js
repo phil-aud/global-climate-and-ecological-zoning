@@ -111,6 +111,13 @@ app.listen(PORT, () => {
 });
 
 // Prevent unhandled promise rejections from crashing the process
-process.on('unhandledRejection', (reason) => {
-  console.error('Unhandled rejection:', reason);
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled rejection at:', promise, 'reason:', reason);
+  // Intentionally do not rethrow — keep the server alive
+});
+
+// Prevent uncaught exceptions (e.g. from GEE callback machinery) from crashing the process
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+  // Intentionally do not rethrow — keep the server alive
 });

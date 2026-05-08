@@ -18,7 +18,7 @@ var holdridgeLifeZones = function(startYear, endYear) {
 };
 
 Map.setCenter(0, 35, 2);
-Map.addLayer(holdridgeLifeZones(1991, 2020), {}, 'HLZ Level 3 (raw codes) - TerraClimate 1991-2020', 0);
+Map.addLayer(holdridgeLifeZones(1995, 2024), {}, 'HLZ Level 3 (raw codes) - TerraClimate 1995-2024', 0);
 
 // SLD style (3-digit codes — identical colour scheme to CRU409 LifeZones_Level3)
 var sld_intervals =
@@ -150,12 +150,85 @@ var sld_intervals =
   '</ColorMap>' +
 '</RasterSymbolizer>';
 
-Map.addLayer(holdridgeLifeZones(1991, 2020).sldStyle(sld_intervals), {}, 'Holdridge Life Zones Level 3 - TerraClimate 1991-2020');
+Map.addLayer(holdridgeLifeZones(1995, 2024).sldStyle(sld_intervals), {}, 'Holdridge Life Zones Level 3 - TerraClimate 1995-2024');
+
+// --- Overlay: altitude-belt symbols (Basal, Premontane, Montane, Subalpine, Alpine, Nival)
+var hlzImg = holdridgeLifeZones(1995, 2024);
+// tens digit: (code/10).floor() % 10 gives the altitude belt (1..6 expected)
+var belt = hlzImg.divide(10).floor().mod(10);
+
+// pixel coordinates (integers) for pattern generation
+var px = ee.Image.pixelLonLat().select('longitude').multiply(100000).toInt();
+var py = ee.Image.pixelLonLat().select('latitude').multiply(100000).toInt();
+
+var period = 12; // pattern period in pixels
+var width = 4;   // stripe width
+
+// helper patterns
+var rightDiag = px.add(py).mod(period).lt(width);            // right diagonal stripes
+var leftDiag  = px.subtract(py).abs().mod(period).lt(width); // left diagonal stripes
+var xPattern  = rightDiag.or(leftDiag);                      // X pattern
+var points    = px.mod(period).eq(0).and(py.mod(period).eq(0)); // dots grid
+var snowflake = rightDiag.or(leftDiag).or(points);           // approximate snowflake: diagonals + dots
+
+// create masked images for each belt
+var basalMask     = belt.eq(1).selfMask();
+var premontaneMask= belt.eq(2).selfMask();
+var montaneMask   = belt.eq(3).selfMask();
+var subalpineMask = belt.eq(4).selfMask();
+var alpineMask    = belt.eq(5).selfMask();
+var nivalMask     = belt.eq(6).selfMask();
+
+// pattern images (value 1 where pattern exists)
+var pat_basal      = ee.Image(0).updateMask(basalMask); // no symbol for basal
+var pat_premontane = rightDiag.updateMask(premontaneMask);
+var pat_montane    = leftDiag.updateMask(montaneMask);
+var pat_subalpine  = xPattern.updateMask(subalpineMask);
+var pat_alpine     = points.updateMask(alpineMask);
+var pat_nival      = snowflake.updateMask(nivalMask);
+
+// combine patterns into single overlay
+var patternOverlay = pat_premontane.unmask(0)
+  .add(pat_montane.unmask(0))
+  .add(pat_subalpine.unmask(0))
+  .add(pat_alpine.unmask(0))
+  .add(pat_nival.unmask(0));
+
+Map.addLayer(patternOverlay.updateMask(patternOverlay), {palette: ['000000'], opacity: 0.45}, 'HLZ Level 3 - Altitude Belt Symbols');
+
+// --- Legend: simple symbol icons (SVG data URLs) and labels
+var makeIcon = function(svg) {
+  return ui.Label('', {width: '28px', height: '20px', backgroundColor: 'white', backgroundImage: 'data:image/svg+xml;utf8,' + svg});
+};
+
+// small SVG snippets for each symbol (transparent background)
+var svgRight = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="28" height="20"><rect width="28" height="20" fill="white"/><g stroke="black" stroke-width="2"><line x1="-4" y1="24" x2="24" y2="-4"/></g></svg>');
+var svgLeft  = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="28" height="20"><rect width="28" height="20" fill="white"/><g stroke="black" stroke-width="2"><line x1="-4" y1="-4" x2="24" y2="24"/></g></svg>');
+var svgX     = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="28" height="20"><rect width="28" height="20" fill="white"/><g stroke="black" stroke-width="2"><line x1="-4" y1="-4" x2="24" y2="24"/><line x1="-4" y1="24" x2="24" y2="-4"/></g></svg>');
+var svgDot   = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="28" height="20"><rect width="28" height="20" fill="white"/><g fill="black"><circle cx="7" cy="6" r="2"/><circle cx="21" cy="6" r="2"/><circle cx="7" cy="14" r="2"/><circle cx="21" cy="14" r="2"/></g></svg>');
+var svgSnow  = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="28" height="20"><rect width="28" height="20" fill="white"/><g stroke="black" stroke-width="1.5" fill="none"><line x1="14" y1="2" x2="14" y2="18"/><line x1="2" y1="10" x2="26" y2="10"/><line x1="5" y1="4" x2="23" y2="16"/><line x1="5" y1="16" x2="23" y2="4"/></g></svg>');
+
+// Build legend panel
+var legend = ui.Panel({style: {position: 'bottom-right', padding: '8px', backgroundColor: 'white', border: '1px solid #444'}});
+legend.add(ui.Label('HLZ Level 3 — Altitude belt symbols', {fontWeight: 'bold'}));
+
+var row = function(icon, text) {
+  return ui.Panel([makeIcon(icon), ui.Label(text)], ui.Panel.Layout.Flow('horizontal'), {margin: '4px 0'});
+};
+
+legend.add(row('', 'Basal — no symbol'));
+legend.add(row(svgRight, 'Premontane — right diagonal stripes'));
+legend.add(row(svgLeft, 'Montane — left diagonal stripes'));
+legend.add(row(svgX, 'Subalpine — X'));
+legend.add(row(svgDot, 'Alpine — points'));
+legend.add(row(svgSnow, 'Nival — snowflake'));
+
+Map.add(legend);
 
 //// Export
 Export.image.toAsset({
-  image: holdridgeLifeZones(1991, 2020),
-  description: 'HoldridgeLifeZones_Level3_TerraClimate_1991-2020',
+  image: holdridgeLifeZones(1995, 2024),
+  description: 'HoldridgeLifeZones_Level3_TerraClimate_1995-2024',
   scale: 1000,
   maxPixels: 9e9
 });

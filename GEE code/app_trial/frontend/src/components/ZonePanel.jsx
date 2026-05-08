@@ -133,7 +133,7 @@ function ZonePanel({ coords, zoneData, bioData, onCoordsChange, onZoneDataUpdate
             : '—'}
         </p>
         <p>
-          <strong><em>Mean annual biotemperature (tBio) at sea-level:</em></strong> <em>{bioData?.tBio0 ?? '—'}°C</em>
+          <strong><em>Mean annual biotemperature at sea-level (t0Bio):</em></strong> <em>{bioData?.tBio0 ?? '—'}°C</em>
         </p>
         <p>
           <strong>Mean annual precipitation (P):</strong> {bioData?.precipitation ?? '—'} mm

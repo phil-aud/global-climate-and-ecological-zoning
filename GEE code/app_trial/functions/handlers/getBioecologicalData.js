@@ -128,7 +128,7 @@ async function getBioecologicalData(lon, lat, startYear, endYear, dataset = 'cru
 
     return {
       biotemperature: Number(tBioVal.toFixed(2)),   // tBio at actual elevation
-      tBio0:          Number(t0BioVal.toFixed(2)),  // sea-level corrected (t0Bio)
+      t0Bio:          Number(t0BioVal.toFixed(2)),  // sea-level corrected (t0Bio)
       precipitation:  Number(precip.toFixed(2)),
       petRatio:       Number(petRatio.toFixed(2)),
       elevation:      Number(elevVal.toFixed(2)),
@@ -249,7 +249,7 @@ async function getBioecologicalData(lon, lat, startYear, endYear, dataset = 'cru
 
   return {
     biotemperature: Number(tBioVal.toFixed(2)),   // tBio at actual elevation
-    tBio0:          Number(t0BioVal.toFixed(2)),  // sea-level corrected (t0Bio)
+    t0Bio:          Number(t0BioVal.toFixed(2)),  // sea-level corrected (t0Bio)
     precipitation:  Number(Number(result.precipitation).toFixed(2)),
     petRatio:       Number(Number(result.petRatio).toFixed(2)),
     elevation:      Number(Number(elevVal).toFixed(2)),

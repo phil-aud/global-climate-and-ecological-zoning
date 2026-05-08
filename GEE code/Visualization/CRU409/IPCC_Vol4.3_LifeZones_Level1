@@ -78,7 +78,7 @@ var gez = function (startYear, endYear) {
     ]);
     return hlzc
 };
-//Map.addLayer(gez2023(1991, 2020), {}, 'final', 0); 
+//Map.addLayer(gez2023(1995, 2024), {}, 'final', 0); 
 
 var sld_intervals =
 '<RasterSymbolizer>' +

@@ -15,7 +15,7 @@ var holdridgeLifeZones = function(startYear, endYear) {
 	return hlz.classification(startYear, endYear);
 	};
 	
-Map.addLayer(holdridgeLifeZones(1991, 2020), {}, 'final', 0);
+Map.addLayer(holdridgeLifeZones(1995, 2024), {}, 'final', 0);
 
 
 // Define an SLD style of discrete intervals to apply to the image.
@@ -159,7 +159,7 @@ Map.setCenter(0, 35, 2);
 
 
 // 30 Year Comparison from 1901
-Map.addLayer(holdridgeLifeZones(1991, 2020).sldStyle(sld_intervals), {}, 'Holdridge Life Zones '+'1961'+'-'+'1990');
+Map.addLayer(holdridgeLifeZones(1995, 2024).sldStyle(sld_intervals), {}, 'Holdridge Life Zones 1995-2024');
 
 
 ///////////////////////// REMAP
@@ -278,15 +278,15 @@ var sld_intervalsHLZ2 =
   '</ColorMap>' +
 '</RasterSymbolizer>';
 
-Map.addLayer(lv2HLZ(1991, 2020).sldStyle(sld_intervalsHLZ2), {}, 'Holdridge Life Zones II '+'1961'+'-'+'1990')
+Map.addLayer(lv2HLZ(1995, 2024).sldStyle(sld_intervalsHLZ2), {}, 'Holdridge Life Zones II 1995-2024')
 
 ///////////////////////// EXPORT
 
 Export.image.toAsset({
-  image: holdridgeLifeZones(1991, 2020), 
+  image: holdridgeLifeZones(1995, 2024), 
   description:"HLZLevel2", 
-  scale: holdridgeLifeZones(1991, 2020).projection().nominalScale(),
-  crs: holdridgeLifeZones(1991, 2020).projection().crs(),
+  scale: holdridgeLifeZones(1995, 2024).projection().nominalScale(),
+  crs: holdridgeLifeZones(1995, 2024).projection().crs(),
   maxPixels: 9e9
   })
 

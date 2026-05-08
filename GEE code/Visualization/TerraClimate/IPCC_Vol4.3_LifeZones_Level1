@@ -114,7 +114,7 @@ var sld_intervals =
 '</RasterSymbolizer>';
 
 Map.setCenter(0, 35, 2);
-Map.addLayer(gez(1991, 2020).sldStyle(sld_intervals), {}, 'IPCC GEZ (HLZ Level 1) - TerraClimate 1991-2020');
+Map.addLayer(gez(1995, 2024).sldStyle(sld_intervals), {}, 'IPCC GEZ (HLZ Level 1) - TerraClimate 1995-2024');
 
 //// Legend
 function createLegend() {
@@ -167,16 +167,16 @@ Map.add(createLegend());
 
 //// Export
 Export.image.toDrive({
-  image: gez(1991, 2020),
-  description: 'IPCC_GEZ_HLZ_Level1_TerraClimate_1991-2020',
+  image: gez(1995, 2024),
+  description: 'IPCC_GEZ_HLZ_Level1_TerraClimate_1995-2024',
   scale: 1000,
   fileFormat: 'GeoTIFF',
   maxPixels: 1e13
 });
 
 Export.image.toAsset({
-  image: gez(1991, 2020),
-  description: 'HoldridgeLifeZones/IPCC_GEZ_HLZ_Level1_TerraClimate_1991-2020',
+  image: gez(1995, 2024),
+  description: 'HoldridgeLifeZones/IPCC_GEZ_HLZ_Level1_TerraClimate_1995-2024',
   scale: 1000,
   maxPixels: 1e13
 });

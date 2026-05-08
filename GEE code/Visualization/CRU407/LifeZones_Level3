@@ -160,7 +160,7 @@ Map.setCenter(0, 35, 2);
 
 
 // 30 Year Comparison from 1901
-Map.addLayer(holdridgeLifeZones(1991, 2020).sldStyle(sld_intervals), {}, 'Holdridge Life Zones '+'1961'+'-'+'1990');
+Map.addLayer(holdridgeLifeZones(1995, 2024).sldStyle(sld_intervals), {}, 'Holdridge Life Zones 1995-2024');
 
 
 //// Create Legend
@@ -278,13 +278,13 @@ Map.add(createLegend());
 
 
 // Add the image layer to the map
-Map.addLayer(holdridgeLifeZones(1991, 2020).randomVisualizer(), {}, 'Randomly Visualized Image');
+Map.addLayer(holdridgeLifeZones(1995, 2024).randomVisualizer(), {}, 'Randomly Visualized Image');
 
-// print(holdridgeLifeZones(1991, 2020).projection())
+// print(holdridgeLifeZones(1995, 2024).projection())
 var transform = [0.00833333333333, 0, -180, 0, -0.00833333333333, 89.99999999994];
 
 Export.image.toAsset({
-  image: holdridgeLifeZones(1991, 2020), 
+  image: holdridgeLifeZones(1995, 2024), 
   description:"HLZLevel3", 
   crs: "EPSG:4326",
   crsTransform :transform,

@@ -231,6 +231,11 @@ function ZonePanel({ coords, zoneData, bioData, onCoordsChange, onZoneDataUpdate
           <li>Audebert, P., Milne, E., Schiettecatte, L.S. et al. (2024) Ecological zoning for climate policy and global change studies. <em>Nat Sustain</em> 7, 1294–1303.</li>
           <li>Audebert et al. (2026). Aligning climate zoning to ecological zoning: A harmonized classification approach. Under review.</li>
           <li>Holdridge, L.R. (1967). <em>Life Zone Ecology</em>. Tropical Science Center, San José, Costa Rica.</li>
+          {dataset === 'terraclimate' ? (
+            <li>Abatzoglou, J.T., Dobrowski, S.Z., Parks, S.A. &amp; Hegewisch, K.C. (2018). TerraClimate, a high-resolution global dataset of monthly climate and climatic water balance. <em>Scientific Data</em> 5, 170191. IDAHO_EPSCOR/TERRACLIMATE (1958–2024).</li>
+          ) : (
+            <li>Harris, I., Osborn, T.J., Jones, P. &amp; Lister, D. (2020). Version 4 of the CRU TS monthly high-resolution gridded multivariate climate dataset. <em>Scientific Data</em> 7, 109. CRU TS 4.09 (1901–2024).</li>
+          )}
         </ul>
       </div>
 

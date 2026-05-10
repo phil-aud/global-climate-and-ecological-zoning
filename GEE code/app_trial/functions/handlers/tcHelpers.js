@@ -133,20 +133,18 @@ function cruMonthlyMeans(img, startYear, endYear) {
  * @param {ee.Image} elevation  - Elevation (m)
  */
 function _buildHLZImage(t0Bio, hasFrost, annualPrecip, annualPet, elevation) {
-  // ── Latitudinal regions ──
+  // ── Latitudinal regions (constant-lapse-rate variant: temperature only) ──
   const tropical      = t0Bio.gte(24);
-  const subtropical   = t0Bio.multiply(hasFrost.not()).gte(12)
-                             .multiply(t0Bio.multiply(hasFrost.not()).lt(24));
-  const warmTemperate = t0Bio.multiply(hasFrost).gte(12)
-                             .multiply(t0Bio.multiply(hasFrost).lt(24));
-  const coolTemperate = t0Bio.gte(6).multiply(t0Bio.lt(12));
-  const boreal        = t0Bio.gte(3).multiply(t0Bio.lt(6));
-  const subpolar      = t0Bio.gte(1.5).multiply(t0Bio.lt(3));
-  const polar         = t0Bio.gte(0).multiply(t0Bio.lt(1.5));
+  const subtropical   = t0Bio.gte(18).and(t0Bio.lt(24));
+  const warmTemperate = t0Bio.gte(12).and(t0Bio.lt(18));
+  const coolTemperate = t0Bio.gte(6).and(t0Bio.lt(12));
+  const boreal        = t0Bio.gte(3).and(t0Bio.lt(6));
+  const subpolar      = t0Bio.gte(1.5).and(t0Bio.lt(3));
+  const polar         = t0Bio.gte(0).and(t0Bio.lt(1.5));
 
-  // ── Altitudinal belts (dynamic baselines calculated from sea-level biotemperature) ──
+  // ── Altitudinal belts (constant lapse rate: 6 °C/km → k = 1000/6 m per °C) ──
   const el = elevation;
-  const k = 1000 / 6; // m per °C
+  const k = 1000 / 6;
 
   const trop_base = t0Bio.subtract(24).multiply(k);
   const subt_base = t0Bio.subtract(18).multiply(k);
@@ -155,40 +153,52 @@ function _buildHLZImage(t0Bio, hasFrost, annualPrecip, annualPet, elevation) {
   const bor_base  = t0Bio.subtract(3).multiply(k);
   const sp_base   = t0Bio.subtract(1.5).multiply(k);
 
+  // ── TROPICAL ──
   const tropicalBasal        = tropical.multiply(el.lte(trop_base));
   const tropicalPremontane   = tropical.multiply(el.gt(trop_base).and(el.lte(trop_base.add(1000))));
   const tropicalLowerMontane = tropical.multiply(el.gt(trop_base.add(1000)).and(el.lte(trop_base.add(2000))));
   const tropicalMontane      = tropical.multiply(el.gt(trop_base.add(2000)).and(el.lte(trop_base.add(3000))));
-  const tropicalSubalpine    = tropical.multiply(el.gt(trop_base.add(3000)).and(el.lte(trop_base.add(4000))));
-  const tropicalAlpine       = tropical.multiply(el.gt(trop_base.add(4000)).and(el.lte(trop_base.add(4500))));
-  const tropicalNival        = tropical.multiply(el.gt(trop_base.add(4500)));
+  const tropicalSubalpine    = tropical.multiply(el.gt(trop_base.add(3000)).and(el.lte(trop_base.add(3500))));
+  const tropicalAlpine       = tropical.multiply(el.gt(trop_base.add(3500)).and(el.lte(trop_base.add(3750))));
+  const tropicalNival        = tropical.multiply(el.gt(trop_base.add(3750)));
 
-  const subtropicalPremontane   = subtropical.multiply(el.lte(subt_base));
+  // ── SUBTROPICAL ──
+  // Basal: 18-24 °C range, below basal threshold, NO frost
+  // Above basal: entire 18-24 °C range uses subtropical geometry regardless of frost
+  const subtropicalBasal        = subtropical.multiply(el.lte(subt_base).and(hasFrost.not()));
   const subtropicalLowerMontane = subtropical.multiply(el.gt(subt_base).and(el.lte(subt_base.add(1000))));
   const subtropicalMontane      = subtropical.multiply(el.gt(subt_base.add(1000)).and(el.lte(subt_base.add(2000))));
-  const subtropicalSubalpine    = subtropical.multiply(el.gt(subt_base.add(2000)).and(el.lte(subt_base.add(3000))));
-  const subtropicalAlpine       = subtropical.multiply(el.gt(subt_base.add(3000)).and(el.lte(subt_base.add(3500))));
-  const subtropicalNival        = subtropical.multiply(el.gt(subt_base.add(3500)));
+  const subtropicalSubalpine    = subtropical.multiply(el.gt(subt_base.add(2000)).and(el.lte(subt_base.add(2500))));
+  const subtropicalAlpine       = subtropical.multiply(el.gt(subt_base.add(2500)).and(el.lte(subt_base.add(2750))));
+  const subtropicalNival        = subtropical.multiply(el.gt(subt_base.add(2750)));
 
-  const warmTemperateLowerMontane = warmTemperate.multiply(el.lte(wt_base));
-  const warmTemperateMontane      = warmTemperate.multiply(el.gt(wt_base).and(el.lte(wt_base.add(1000))));
-  const warmTemperateSubalpine    = warmTemperate.multiply(el.gt(wt_base.add(1000)).and(el.lte(wt_base.add(1500))));
-  const warmTemperateAlpine       = warmTemperate.multiply(el.gt(wt_base.add(1500)).and(el.lte(wt_base.add(1750))));
-  const warmTemperateNival        = warmTemperate.multiply(el.gt(wt_base.add(1750)));
+  // ── WARM TEMPERATE ──
+  // Basal: 12-18 °C basal OR 18-24 °C basal WITH frost
+  // Above basal: only 12-18 °C range uses warm temperate geometry
+  const warmTemperateBasal     = warmTemperate.multiply(el.lte(wt_base))
+                                   .or(subtropical.multiply(el.lte(subt_base).and(hasFrost)));
+  const warmTemperateMontane   = warmTemperate.multiply(el.gt(wt_base).and(el.lte(wt_base.add(1000))));
+  const warmTemperateSubalpine = warmTemperate.multiply(el.gt(wt_base.add(1000)).and(el.lte(wt_base.add(1500))));
+  const warmTemperateAlpine    = warmTemperate.multiply(el.gt(wt_base.add(1500)).and(el.lte(wt_base.add(1750))));
+  const warmTemperateNival     = warmTemperate.multiply(el.gt(wt_base.add(1750)));
 
-  const coolTemperateMontane   = coolTemperate.multiply(el.lte(ct_base));
+  // ── COOL TEMPERATE ──
+  const coolTemperateBasal     = coolTemperate.multiply(el.lte(ct_base));
   const coolTemperateSubalpine = coolTemperate.multiply(el.gt(ct_base).and(el.lte(ct_base.add(500))));
   const coolTemperateAlpine    = coolTemperate.multiply(el.gt(ct_base.add(500)).and(el.lte(ct_base.add(750))));
   const coolTemperateNival     = coolTemperate.multiply(el.gt(ct_base.add(750)));
 
-  const borealSubalpine = boreal.multiply(el.lte(bor_base.add(500)));
-  const borealAlpine    = boreal.multiply(el.gt(bor_base.add(500)).and(el.lte(bor_base.add(750))));
-  const borealNival     = boreal.multiply(el.gt(bor_base.add(750)));
+  // ── BOREAL ──
+  const borealBasal  = boreal.multiply(el.lte(bor_base));
+  const borealAlpine = boreal.multiply(el.gt(bor_base).and(el.lte(bor_base.add(500))));
+  const borealNival  = boreal.multiply(el.gt(bor_base.add(500)));
 
-  const subpolarAlpine = subpolar.multiply(el.lte(sp_base.add(250)));
-  const subpolarNival  = subpolar.multiply(el.gt(sp_base.add(250)));
+  // ── SUBPOLAR ──
+  const subpolarBasal = subpolar.multiply(el.lte(sp_base));
+  const subpolarNival = subpolar.multiply(el.gt(sp_base));
 
-  const polarNival = polar;
+  // ── POLAR ──
+  const polarZone = polar;
 
   // ── Moisture class (circumcenter-of-hypotenuse) ──
   const map       = annualPrecip;
@@ -256,14 +266,14 @@ function _buildHLZImage(t0Bio, hasFrost, annualPrecip, annualPet, elevation) {
     .add(tropicalAlpine.multiply(chSP.lte(2)).multiply(164))
     // Tropical Nival
     .add(tropicalNival.multiply(171))
-    // Subtropical Premontane
-    .add(subtropicalPremontane.multiply(chSW.gt(7)).multiply(211))
-    .add(tPM(subtropicalPremontane, 7).multiply(212))
-    .add(tPM(subtropicalPremontane, 6).multiply(213))
-    .add(tPM(subtropicalPremontane, 5).multiply(214))
-    .add(tPM(subtropicalPremontane, 4).multiply(215))
-    .add(tPM(subtropicalPremontane, 3).multiply(216))
-    .add(subtropicalPremontane.multiply(chSW.lte(2)).multiply(217))
+    // Subtropical Basal
+    .add(subtropicalBasal.multiply(chSW.gt(7)).multiply(211))
+    .add(tPM(subtropicalBasal, 7).multiply(212))
+    .add(tPM(subtropicalBasal, 6).multiply(213))
+    .add(tPM(subtropicalBasal, 5).multiply(214))
+    .add(tPM(subtropicalBasal, 4).multiply(215))
+    .add(tPM(subtropicalBasal, 3).multiply(216))
+    .add(subtropicalBasal.multiply(chSW.lte(2)).multiply(217))
     // Subtropical Lower Montane
     .add(subtropicalLowerMontane.multiply(chSW.gt(7)).multiply(221))
     .add(tPM(subtropicalLowerMontane, 7).multiply(222))
@@ -292,14 +302,14 @@ function _buildHLZImage(t0Bio, hasFrost, annualPrecip, annualPet, elevation) {
     .add(subtropicalAlpine.multiply(chSP.lte(2)).multiply(254))
     // Subtropical Nival
     .add(subtropicalNival.multiply(261))
-    // Warm Temperate Lower Montane
-    .add(warmTemperateLowerMontane.multiply(chSW.gt(7)).multiply(311))
-    .add(tPM(warmTemperateLowerMontane, 7).multiply(312))
-    .add(tPM(warmTemperateLowerMontane, 6).multiply(313))
-    .add(tPM(warmTemperateLowerMontane, 5).multiply(314))
-    .add(tPM(warmTemperateLowerMontane, 4).multiply(315))
-    .add(tPM(warmTemperateLowerMontane, 3).multiply(316))
-    .add(warmTemperateLowerMontane.multiply(chSW.lte(2)).multiply(317))
+    // Warm Temperate Basal
+    .add(warmTemperateBasal.multiply(chSW.gt(7)).multiply(311))
+    .add(tPM(warmTemperateBasal, 7).multiply(312))
+    .add(tPM(warmTemperateBasal, 6).multiply(313))
+    .add(tPM(warmTemperateBasal, 5).multiply(314))
+    .add(tPM(warmTemperateBasal, 4).multiply(315))
+    .add(tPM(warmTemperateBasal, 3).multiply(316))
+    .add(warmTemperateBasal.multiply(chSW.lte(2)).multiply(317))
     // Warm Temperate Montane
     .add(warmTemperateMontane.multiply(chC.gt(6)).multiply(321))
     .add(warmTemperateMontane.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(322))
@@ -320,13 +330,13 @@ function _buildHLZImage(t0Bio, hasFrost, annualPrecip, annualPet, elevation) {
     .add(warmTemperateAlpine.multiply(chSP.lte(2)).multiply(344))
     // Warm Temperate Nival
     .add(warmTemperateNival.multiply(351))
-    // Cool Temperate Montane
-    .add(coolTemperateMontane.multiply(chC.gt(6)).multiply(411))
-    .add(coolTemperateMontane.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(412))
-    .add(coolTemperateMontane.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(413))
-    .add(coolTemperateMontane.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(414))
-    .add(coolTemperateMontane.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(415))
-    .add(coolTemperateMontane.multiply(chC.lte(2)).multiply(416))
+    // Cool Temperate Basal
+    .add(coolTemperateBasal.multiply(chC.gt(6)).multiply(411))
+    .add(coolTemperateBasal.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(412))
+    .add(coolTemperateBasal.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(413))
+    .add(coolTemperateBasal.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(414))
+    .add(coolTemperateBasal.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(415))
+    .add(coolTemperateBasal.multiply(chC.lte(2)).multiply(416))
     // Cool Temperate Subalpine
     .add(coolTemperateSubalpine.multiply(chB.gt(5)).multiply(421))
     .add(coolTemperateSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(422))
@@ -340,12 +350,12 @@ function _buildHLZImage(t0Bio, hasFrost, annualPrecip, annualPet, elevation) {
     .add(coolTemperateAlpine.multiply(chSP.lte(2)).multiply(434))
     // Cool Temperate Nival
     .add(coolTemperateNival.multiply(441))
-    // Boreal Subalpine
-    .add(borealSubalpine.multiply(chB.gt(5)).multiply(511))
-    .add(borealSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(512))
-    .add(borealSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(513))
-    .add(borealSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(514))
-    .add(borealSubalpine.multiply(chB.lte(2)).multiply(515))
+    // Boreal Basal
+    .add(borealBasal.multiply(chB.gt(5)).multiply(511))
+    .add(borealBasal.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(512))
+    .add(borealBasal.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(513))
+    .add(borealBasal.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(514))
+    .add(borealBasal.multiply(chB.lte(2)).multiply(515))
     // Boreal Alpine
     .add(borealAlpine.multiply(chSP.gt(4)).multiply(521))
     .add(borealAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(522))
@@ -353,15 +363,15 @@ function _buildHLZImage(t0Bio, hasFrost, annualPrecip, annualPet, elevation) {
     .add(borealAlpine.multiply(chSP.lte(2)).multiply(524))
     // Boreal Nival
     .add(borealNival.multiply(531))
-    // Subpolar Alpine
-    .add(subpolarAlpine.multiply(chSP.gt(4)).multiply(611))
-    .add(subpolarAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(612))
-    .add(subpolarAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(613))
-    .add(subpolarAlpine.multiply(chSP.lte(2)).multiply(614))
+    // Subpolar Basal
+    .add(subpolarBasal.multiply(chSP.gt(4)).multiply(611))
+    .add(subpolarBasal.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(612))
+    .add(subpolarBasal.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(613))
+    .add(subpolarBasal.multiply(chSP.lte(2)).multiply(614))
     // Subpolar Nival
     .add(subpolarNival.multiply(621))
     // Polar
-    .add(polarNival.multiply(711))
+    .add(polarZone.multiply(711))
   );
 }
 
@@ -387,10 +397,8 @@ function computeHLZ(startYear, endYear) {
     mmb(6), mmb(7), mmb(8),  mmb(9),  mmb(10), mmb(11),
   ]).sum().divide(12);
 
-  // Sea-level biotemperature: 6·cos(lat) °C per km elevation (only where tBio > 0)
-  const lapseRate = ee.Image.pixelLonLat().select('latitude')
-                     .multiply(Math.PI / 180).cos().multiply(6);
-  const t0Bio = tBio.add(tBio.gt(0).multiply(elevation.divide(1000).multiply(lapseRate)));
+  // Sea-level biotemperature: constant 6 °C per km elevation (only where tBio > 0)
+  const t0Bio = tBio.add(tBio.gt(0).multiply(elevation.divide(1000).multiply(6)));
 
   // ── Frost: any month where tmmn×0.1 < 0 ──
   const hasFrost = ee.ImageCollection(TC_COLLECTION)
@@ -430,10 +438,8 @@ function computeHLZ_CRU(startYear, endYear) {
     mmb(6), mmb(7), mmb(8),  mmb(9),  mmb(10), mmb(11),
   ]).sum().divide(12);
 
-  // Sea-level biotemperature: 6·cos(lat) °C per km elevation (only where tBio > 0)
-  const lapseRate = ee.Image.pixelLonLat().select('latitude')
-                     .multiply(Math.PI / 180).cos().multiply(6);
-  const t0Bio = tBio.add(tBio.gt(0).multiply(elevation.divide(1000).multiply(lapseRate)));
+  // Sea-level biotemperature: constant 6 °C per km elevation (only where tBio > 0)
+  const t0Bio = tBio.add(tBio.gt(0).multiply(elevation.divide(1000).multiply(6)));
 
   // ── Frost: mean annual frost days (sum of 12 monthly means) > 0.5 ──
   // Follows Lugo et al. 1999: < 0.5 frost days/year = no-frost zone

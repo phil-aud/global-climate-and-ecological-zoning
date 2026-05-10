@@ -503,7 +503,7 @@ async function getMapTiles(req, res) {
 
     // ── CRU (default): compute on-the-fly using same formula as inspector ────
     // Using computeHLZ_CRU ensures the map tiles use the exact same lapse-rate
-    // formula (6·cos(lat) °C/km) and data as getBioecologicalData.js.
+    // formula (constant 6 °C/km) and data as getBioecologicalData.js.
     const hlzImageCRU = computeHLZ_CRU(CRU_TILE_START, CRU_TILE_END);
 
     const gczImageCRU   = hlzImageCRU.remap(HLZ_FROM, GCZ_TO,  0);

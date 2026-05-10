@@ -35,6 +35,7 @@ var END_YEAR   = 2024;
 var cruTsTmp  = ee.Image("projects/ee-philaudebert/assets/CRU/CRU409_1901-2024/cru_ts409_1901-2024_tmp");
 var cruTsPre  = ee.Image("projects/ee-philaudebert/assets/CRU/CRU409_1901-2024/cru_ts409_1901-2024_pre");
 var cruTsPet  = ee.Image("projects/ee-philaudebert/assets/CRU/CRU409_1901-2024/cru_ts409_1901-2024_pet");
+var cruTsFrs  = ee.Image("projects/ee-philaudebert/assets/CRU/CRU409_1901-2024/cru_ts409_1901-2024_frs");
 var elevation = ee.Image("USGS/GTOPO30");
 
 // =========================================================================
@@ -94,9 +95,11 @@ var holdridgeLifeZones = function(startYear, endYear) {
     tBio.gt(0).multiply(elevation.divide(1000).multiply(lapseRate))
   );
 
-  // -- Frost proxy: any month with monthly mean tmp < 0°C
-  //    (CRU TS has no daily-min band; this is a lower bound on frost.) --
-  var hasFrost = monthlyTemp.min().lt(0);
+  // -- Frost proxy: CRU TS frost-day frequency (frs).
+  //    Annual sum of monthly mean frost days > 0.5 ⇒ frost (warm temperate);
+  //    ≤ 0.5 ⇒ effectively frost-free (subtropical). --
+  var annualFrostDays = cruMonthlyMean(cruTsFrs, startYear, endYear).sum();
+  var hasFrost = annualFrostDays.gt(0.5);
 
   // ── Latitudinal regions ───────────────────────────────────────────
   var el = elevation;

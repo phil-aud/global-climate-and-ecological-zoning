@@ -138,27 +138,51 @@ function PatternTileLayer({ patternUrl, opacity }) {
             const px = (i / 4) % w;
             const py = Math.floor(i / 4 / w);
 
-            // Tolerant colour tests to survive possible JPEG tile compression:
-            if (r > 180 && g < 80 && b < 80) {
-              // Stipple — dark dot every 4 px
-              if (px % 4 === 0 && py % 4 === 0) {
-                od[i] = 0; od[i+1] = 0; od[i+2] = 0; od[i+3] = 110;
+            // Tolerant colour tests to survive JPEG tile compression.
+            // Colour → symbol mapping (server SLD uses distinct pure colours):
+            //  Red   (#FF0000)   -> premontane -> right-diagonal hatch
+            //  Green (#00FF00)   -> lower montane -> left-diagonal hatch
+            //  Blue  (#0000FF)   -> montane -> vertical lines
+            //  Magenta (#FF00FF) -> subalpine -> X (both diagonals)
+            //  Orange (#FFA500)  -> alpine -> points
+            //  Yellow (#FFFF00)  -> nival -> stars
+            if (r > 180 && g < 120 && b < 120) {
+              // Right-diagonal hatch (45°)
+              if ((px - py + 1024) % 5 === 0) {
+                od[i] = 0; od[i+1] = 0; od[i+2] = 0; od[i+3] = 150;
               }
-            } else if (r < 80 && g > 180 && b < 80) {
-              // Hatch — 135° diagonal line every 5 px
+            } else if (g > 180 && r < 120 && b < 120) {
+              // Left-diagonal hatch (135°)
               if ((px + py) % 5 === 0) {
-                od[i] = 0; od[i+1] = 0; od[i+2] = 0; od[i+3] = 90;
+                od[i] = 0; od[i+1] = 0; od[i+2] = 0; od[i+3] = 150;
               }
-            } else if (r < 80 && g < 80 && b > 180) {
-              // Cross-hatch — both 135° and 45° diagonals every 5 px
+            } else if (r > 180 && b > 180 && g < 120) {
+              // Magenta -> X pattern (both diagonals)
               if ((px + py) % 5 === 0 || (px - py + 1024) % 5 === 0) {
-                od[i] = 0; od[i+1] = 0; od[i+2] = 0; od[i+3] = 90;
+                od[i] = 0; od[i+1] = 0; od[i+2] = 0; od[i+3] = 140;
               }
-            } else if (r > 180 && g > 180 && b < 80) {
-              // Nival — semi-transparent light fill + sparse dots
-              od[i] = 230; od[i+1] = 230; od[i+2] = 230; od[i+3] = 110;
-              if (px % 5 === 0 && py % 5 === 0) {
-                od[i] = 60; od[i+1] = 60; od[i+2] = 60; od[i+3] = 150;
+            } else if (b > 180 && r < 120 && g < 120) {
+              // Blue -> vertical lines for montane
+              if (px % 4 === 0) {
+                od[i] = 0; od[i+1] = 0; od[i+2] = 0; od[i+3] = 140;
+              }
+            } else if (r > 200 && g > 120 && b < 120) {
+              // Points (orange) — grid of dots every 6 px
+              if (px % 6 === 0 && py % 6 === 0) {
+                od[i] = 0; od[i+1] = 0; od[i+2] = 0; od[i+3] = 170;
+              }
+            } else if (r > 180 && g > 180 && b < 120) {
+              // Stars (yellow) — draw small star glyphs sparsely
+              if (px % 12 === 0 && py % 12 === 0) {
+                // small plus-shaped star
+                od[i] = 60; od[i+1] = 60; od[i+2] = 60; od[i+3] = 220;
+                const offs = [1, -1, 256, -256];
+                offs.forEach((off) => {
+                  const j = i + off * 4;
+                  if (j >= 0 && j < od.length) {
+                    od[j] = 60; od[j+1] = 60; od[j+2] = 60; od[j+3] = 220;
+                  }
+                });
               }
             }
             // White (#FFFFFF) or unknown → all zeros = transparent (already 0)
@@ -203,20 +227,58 @@ function PatternTileLayer({ patternUrl, opacity }) {
 //   CIMVectorMarker only (no fill) → 'stipple-only' (Nival deserts)
 
 function getZonePattern(value) {
-  if ([171, 351, 441, 531, 621].includes(value)) return 'stipple-only';
+  // Explicit nival list (some belts place nival on different tens digits)
+  if ([171, 261, 351, 441, 531, 621].includes(value)) return 'snowflake';
   const h = Math.floor(value / 100);       // latitudinal belt (1=Tropical … 7=Polar)
   const t = Math.floor((value % 100) / 10); // altitudinal tier
-  if (h === 1) {
-    if (t === 2) return 'cross-hatch'; // Tropical Premontane
-    if (t === 3 || t === 4) return 'hatch';   // Tropical Lower Montane / Montane
-    if (t === 5 || t === 6) return 'stipple';  // Tropical Subalpine / Alpine
+
+  switch (h) {
+    case 1: // Tropical: has premontane
+      if (t === 1) return null;
+      if (t === 2) return 'right-hatch';
+      if (t === 3) return 'left-hatch';
+      if (t === 4) return 'vertical';
+      if (t === 5) return 'x';
+      if (t === 6) return 'points';
+      return null;
+
+    case 2: // Subtropical: no premontane (t=2 is lower montane)
+      if (t === 1) return null;
+      if (t === 2) return 'left-hatch';
+      if (t === 3) return 'vertical';
+      if (t === 4) return 'x';
+      if (t === 5) return 'points';
+      return null;
+
+    case 3: // Warm temperate: t=2 is montane
+      if (t === 1) return null;
+      if (t === 2) return 'vertical';
+      if (t === 3) return 'x';
+      if (t === 4) return 'points';
+      if (t === 5) return 'snowflake';
+      return null;
+
+    case 4: // Cool temperate
+      if (t === 1) return null;
+      if (t === 2) return 'vertical';
+      if (t === 3) return 'points';
+      if (t === 4) return 'snowflake';
+      return null;
+
+    case 5: // Boreal
+      if (t === 1) return null;
+      if (t === 2) return 'points';
+      if (t === 3) return 'snowflake';
+      return null;
+
+    case 6: // Subpolar
+      if (t === 1) return null;
+      if (t === 2) return 'snowflake';
+      return null;
+
+    default:
+      return null;
   }
-  if (h === 2 && t === 2) return 'hatch';              // Subtropical Lower Montane
-  if (h === 3 && t === 2) return 'hatch';              // Warm Temperate Montane
-  if (h === 3 && (t === 3 || t === 4)) return 'stipple'; // Warm Temperate Subalpine / Alpine
-  if (h === 4 && (t === 2 || t === 3)) return 'stipple'; // Cool Temperate Subalpine / Alpine
-  if (h === 5 && t === 2) return 'stipple';             // Boreal Alpine
-  return null;
 }
 
 const _DOT   = `radial-gradient(circle, rgba(0,0,0,0.38) 1px, transparent 1px) 0 0 / 5px 5px`;
@@ -225,10 +287,22 @@ const _HATCH2 = `repeating-linear-gradient(45deg, rgba(0,0,0,0.28) 0, rgba(0,0,0
 
 function getSwatchStyle(color, pattern) {
   switch (pattern) {
-    case 'stipple':      return { background: `${_DOT}, ${color}` };
-    case 'hatch':        return { background: `${_HATCH}, ${color}` };
-    case 'cross-hatch':  return { background: `${_HATCH}, ${_HATCH2}, ${color}` };
-    case 'stipple-only': return { background: `${_DOT}, #fff` };
+    case 'points':       return { background: `${_DOT}, ${color}` };
+    case 'left-hatch':   return { background: `${_HATCH}, ${color}` };
+    case 'right-hatch':  return { background: `${_HATCH2}, ${color}` };
+    case 'x':            return { background: `${_HATCH}, ${_HATCH2}, ${color}` };
+    case 'vertical':     return { background: `repeating-linear-gradient(90deg, rgba(0,0,0,0.28) 0, rgba(0,0,0,0.28) 1px, transparent 1px, transparent 4px), ${color}` };
+    case 'waves':        return { background: `repeating-linear-gradient(0deg, rgba(0,0,0,0.28) 0, rgba(0,0,0,0.28) 2px, transparent 2px, transparent 10px), ${color}` };
+    case 'snowflake': {
+      const svg = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><polygon points="4,0 4.7,2.6 7.6,2.6 5.1,4.1 5.8,6.9 4,5.2 2.2,6.9 2.9,4.1 0.4,2.6 3.3,2.6" fill="rgba(0,0,0,0.6)"/></svg>');
+      return {
+        background: `${color}`,
+        backgroundImage: `url("data:image/svg+xml;utf8,${svg}")`,
+        backgroundRepeat: 'repeat',
+        backgroundSize: '12px 12px',
+        boxShadow: 'inset 0 0 0 2px rgba(0,0,0,0.06)'
+      };
+    }
     default:             return { background: color };
   }
 }

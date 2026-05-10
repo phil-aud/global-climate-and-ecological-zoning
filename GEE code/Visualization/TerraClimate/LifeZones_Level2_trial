@@ -135,12 +135,20 @@ var holdridgeLifeZones = function(startYear, endYear) {
   var wtLow  = warmTemperate.and(t0Bio.lt(18));
 
   var tropicalBasal        = tropical.multiply(el.lte(trop_base));
-  var tropicalPremontane   = tropical.multiply(el.gt(trop_base).and(el.lte(trop_base.add(1000))));
-  var tropicalLowerMontane = tropical.multiply(el.gt(trop_base.add(1000)).and(el.lte(trop_base.add(2000))));
+  var tropicalPremontane   = tropical.multiply(
+                               el.gt(trop_base)
+                               .and(el.lte(trop_base.add(1000)))
+                               .and(el.lte(frostLineEl)));
+  var tropicalLowerMontane = tropical.multiply(
+                               el.gt(trop_base).and(el.lte(trop_base.add(2000)))
+                               .and(el.gt(frostLineEl))
+                               .or(el.gt(trop_base.add(1000))
+                                 .and(el.lte(trop_base.add(2000)))
+                                 .and(el.lte(frostLineEl))));
   var tropicalMontane      = tropical.multiply(el.gt(trop_base.add(2000)).and(el.lte(trop_base.add(3000))));
   var tropicalSubalpine    = tropical.multiply(el.gt(trop_base.add(3000)).and(el.lte(trop_base.add(4000))));
-  var tropicalAlpine       = tropical.multiply(el.gt(trop_base.add(3500)).and(el.lte(trop_base.add(4500))));
-  var tropicalNival        = tropical.multiply(el.gt(trop_base.add(3750)));
+  var tropicalAlpine       = tropical.multiply(el.gt(trop_base.add(4000)).and(el.lte(trop_base.add(4500))));
+  var tropicalNival        = tropical.multiply(el.gt(trop_base.add(4500)));
 
   var subtropicalBasal        = subtropical.multiply(el.lte(subt_base));
   var subtropicalLowerMontane = subtropical.multiply(el.gt(subt_base)          .and(el.lte(subt_base.add(1000))));

@@ -98,32 +98,30 @@ var holdridgeLifeZones = function(startYear, endYear) {
     mmb(6), mmb(7), mmb(8), mmb(9), mmb(10), mmb(11)
   ]).sum().divide(12);
 
-  // Sea-level biotemperature (+6°C per km elevation, only where tBio > 0)
-  var t0Bio = tBio.add(tBio.gt(0).multiply(elevation.divide(1000).multiply(6)));
+  // ── Fixed lapse rate (Holdridge original: 6°C per 1000m) ─────────
+  var lapseRate = 6;          // °C per 1000m
+  var k         = 1000 / 6;  // m per °C (~166.667), constant
 
-  // -- Frost: any month in the period with monthly mean tmmn < 0°C → frost present --
-  // (If monthly mean tmmn < 0, multiple frost days must have occurred that month)
-  var hasFrost = terraClimate
-    .filter(ee.Filter.calendarRange(startYear, endYear, 'year'))
-    .select('tmmn')
-    .min()
-    .multiply(0.1)
-    .lt(0);
+  // ── Sea-level biotemperature ──────────────────────────────────────
+  // Only correct upward where tBio > 0 (frozen months don't contribute)
+  var t0Bio = tBio.add(
+    tBio.gt(0).multiply(elevation.divide(1000).multiply(lapseRate))
+  );
 
-  // -- Latitudinal regions --
-  var tropical      = t0Bio.gte(24);
-  var subtropical   = t0Bio.multiply(hasFrost.not()).gte(12)
-                          .multiply(t0Bio.multiply(hasFrost.not()).lt(24));
-  var warmTemperate = t0Bio.multiply(hasFrost).gte(12)
-                          .multiply(t0Bio.multiply(hasFrost).lt(24));
-  var coolTemperate = t0Bio.gte(6).multiply(t0Bio.lt(12));
-  var boreal        = t0Bio.gte(3).multiply(t0Bio.lt(6));
-  var subpolar      = t0Bio.gte(1.5).multiply(t0Bio.lt(3));
-  var polar         = t0Bio.gte(0).multiply(t0Bio.lt(1.5));
+  // ── Geometric frost line ──────────────────────────────────────────
+  var frostLineEl = t0Bio.subtract(18).multiply(k);
 
-  // -- Altitudinal belts (dynamic baselines calculated from sea-level biotemperature) --
   var el = elevation;
-  var k = 1000 / 6; // m per °C (approx. 166.667)
+
+  var tropical      = t0Bio.gte(24);
+  var inUpperMid    = t0Bio.gte(18).and(t0Bio.lt(24));
+  var inLowerMid    = t0Bio.gte(12).and(t0Bio.lt(18));
+  var subtropical   = inUpperMid.and(el.lte(frostLineEl));
+  var warmTemperate = inUpperMid.and(el.gt(frostLineEl)).or(inLowerMid);
+  var coolTemperate = t0Bio.gte(6).and(t0Bio.lt(12));
+  var boreal        = t0Bio.gte(3).and(t0Bio.lt(6));
+  var subpolar      = t0Bio.gte(1.5).and(t0Bio.lt(3));
+  var polar         = t0Bio.gte(0).and(t0Bio.lt(1.5));
 
   var trop_base = t0Bio.subtract(24).multiply(k);
   var subt_base = t0Bio.subtract(18).multiply(k);
@@ -131,41 +129,62 @@ var holdridgeLifeZones = function(startYear, endYear) {
   var ct_base   = t0Bio.subtract(6).multiply(k);
   var bor_base  = t0Bio.subtract(3).multiply(k);
   var sp_base   = t0Bio.subtract(1.5).multiply(k);
+  var pol_base  = t0Bio.multiply(k);
 
   var tropicalBasal        = tropical.multiply(el.lte(trop_base));
   var tropicalPremontane   = tropical.multiply(el.gt(trop_base).and(el.lte(trop_base.add(1000))));
   var tropicalLowerMontane = tropical.multiply(el.gt(trop_base.add(1000)).and(el.lte(trop_base.add(2000))));
   var tropicalMontane      = tropical.multiply(el.gt(trop_base.add(2000)).and(el.lte(trop_base.add(3000))));
   var tropicalSubalpine    = tropical.multiply(el.gt(trop_base.add(3000)).and(el.lte(trop_base.add(4000))));
-  var tropicalAlpine       = tropical.multiply(el.gt(trop_base.add(4000)).and(el.lte(trop_base.add(4500))));
-  var tropicalNival        = tropical.multiply(el.gt(trop_base.add(4500)));
+  var tropicalAlpine       = tropical.multiply(el.gt(trop_base.add(3500)).and(el.lte(trop_base.add(4500))));
+  var tropicalNival        = tropical.multiply(el.gt(trop_base.add(3750)));
 
-  var subtropicalPremontane   = subtropical.multiply(el.lte(subt_base));
+  var subtropicalBasal        = subtropical.multiply(el.lte(subt_base));
   var subtropicalLowerMontane = subtropical.multiply(el.gt(subt_base).and(el.lte(subt_base.add(1000))));
   var subtropicalMontane      = subtropical.multiply(el.gt(subt_base.add(1000)).and(el.lte(subt_base.add(2000))));
-  var subtropicalSubalpine    = subtropical.multiply(el.gt(subt_base.add(2000)).and(el.lte(subt_base.add(3000))));
-  var subtropicalAlpine       = subtropical.multiply(el.gt(subt_base.add(3000)).and(el.lte(subt_base.add(3500))));
-  var subtropicalNival        = subtropical.multiply(el.gt(subt_base.add(3500)));
+  var subtropicalSubalpine    = subtropical.multiply(el.gt(subt_base.add(2000)).and(el.lte(subt_base.add(2500))));
+  var subtropicalAlpine       = subtropical.multiply(el.gt(subt_base.add(2500)).and(el.lte(subt_base.add(2750))));
+  var subtropicalNival        = subtropical.multiply(el.gt(subt_base.add(2750)));
 
-  var warmTemperateLowerMontane = warmTemperate.multiply(el.lte(wt_base));
-  var warmTemperateMontane      = warmTemperate.multiply(el.gt(wt_base).and(el.lte(wt_base.add(1000))));
-  var warmTemperateSubalpine    = warmTemperate.multiply(el.gt(wt_base.add(1000)).and(el.lte(wt_base.add(1500))));
-  var warmTemperateAlpine       = warmTemperate.multiply(el.gt(wt_base.add(1500)).and(el.lte(wt_base.add(1750))));
-  var warmTemperateNival        = warmTemperate.multiply(el.gt(wt_base.add(1750)));
+  // Warm Temperate split: t0Bio 18-24 uses subt_base (x1=18)
+  //                       t0Bio 12-18 uses wt_base   (x1=12)
+  var wtHigh = warmTemperate.and(t0Bio.gte(18));
+  var wtLow  = warmTemperate.and(t0Bio.lt(18));
 
-  var coolTemperateMontane   = coolTemperate.multiply(el.lte(ct_base));
+  // ── WARM TEMPERATE, t0Bio 18-24 with frost — uses subt_base (x1=18) ──
+  var warmTemperateHighBasal     = wtHigh.multiply(el.lte(subt_base));
+  var warmTemperateHighMontane   = wtHigh.multiply(el.gt(subt_base)          .and(el.lte(subt_base.add(1000))));
+  var warmTemperateHighSubalpine = wtHigh.multiply(el.gt(subt_base.add(1000)).and(el.lte(subt_base.add(1500))));
+  var warmTemperateHighAlpine    = wtHigh.multiply(el.gt(subt_base.add(1500)).and(el.lte(subt_base.add(1750))));
+  var warmTemperateHighNival     = wtHigh.multiply(el.gt(subt_base.add(1750)));
+
+  // ── WARM TEMPERATE, t0Bio 12-18 — uses wt_base (x1=12) ──────────
+  var warmTemperateLowBasal     = wtLow.multiply(el.lte(wt_base));
+  var warmTemperateLowMontane   = wtLow.multiply(el.gt(wt_base)          .and(el.lte(wt_base.add(1000))));
+  var warmTemperateLowSubalpine = wtLow.multiply(el.gt(wt_base.add(1000)).and(el.lte(wt_base.add(1500))));
+  var warmTemperateLowAlpine    = wtLow.multiply(el.gt(wt_base.add(1500)).and(el.lte(wt_base.add(1750))));
+  var warmTemperateLowNival     = wtLow.multiply(el.gt(wt_base.add(1750)));
+
+  // Merge warm temperate
+  var warmTemperateBasal     = warmTemperateHighBasal.or(warmTemperateLowBasal);
+  var warmTemperateMontane   = warmTemperateHighMontane.or(warmTemperateLowMontane);
+  var warmTemperateSubalpine = warmTemperateHighSubalpine.or(warmTemperateLowSubalpine);
+  var warmTemperateAlpine    = warmTemperateHighAlpine.or(warmTemperateLowAlpine);
+  var warmTemperateNival     = warmTemperateHighNival.or(warmTemperateLowNival);
+
+  var coolTemperateBasal   = coolTemperate.multiply(el.lte(ct_base));
   var coolTemperateSubalpine = coolTemperate.multiply(el.gt(ct_base).and(el.lte(ct_base.add(500))));
   var coolTemperateAlpine    = coolTemperate.multiply(el.gt(ct_base.add(500)).and(el.lte(ct_base.add(750))));
   var coolTemperateNival     = coolTemperate.multiply(el.gt(ct_base.add(750)));
 
-  var borealSubalpine = boreal.multiply(el.lte(bor_base.add(500)));
-  var borealAlpine    = boreal.multiply(el.gt(bor_base.add(500)).and(el.lte(bor_base.add(750))));
-  var borealNival     = boreal.multiply(el.gt(bor_base.add(750)));
+  var borealBasal  = boreal.multiply(el.lte(bor_base));
+  var borealAlpine = boreal.multiply(el.gt(bor_base).and(el.lte(bor_base.add(500))));
+  var borealNival  = boreal.multiply(el.gt(bor_base.add(500)));
 
-  var subpolarAlpine = subpolar.multiply(el.lte(sp_base.add(250)));
-  var subpolarNival  = subpolar.multiply(el.gt(sp_base.add(250)));
+  var subpolarBasal = subpolar.multiply(el.lte(sp_base));
+  var subpolarNival = subpolar.multiply(el.gt(sp_base));
 
-  var polarNival = polar;
+  var polarZone = polar;
 
   // -- Precipitation & PET ratios --
   var map       = tcPre.sum().rename('precipitation');
@@ -231,15 +250,16 @@ var holdridgeLifeZones = function(startYear, endYear) {
     .add(tropicalAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(163))
     .add(tropicalAlpine.multiply(chSP.lte(2)).multiply(164))
     .add(tropicalNival.multiply(171))
-    // Subtropical Premontane
-    .add(subtropicalPremontane.multiply(chSW.gt(7)).multiply(211))
-    .add(tPM(subtropicalPremontane, 7).multiply(212))
-    .add(tPM(subtropicalPremontane, 6).multiply(213))
-    .add(tPM(subtropicalPremontane, 5).multiply(214))
-    .add(tPM(subtropicalPremontane, 4).multiply(215))
-    .add(tPM(subtropicalPremontane, 3).multiply(216))
-    .add(subtropicalPremontane.multiply(chSW.lte(2)).multiply(217))
-    // Subtropical Lower Montane
+    // ── SUBTROPICAL BASAL ────────────────────────────────────────────
+    .add(subtropicalBasal.multiply(chSW.gt(7)).multiply(211))
+    .add(tPM(subtropicalBasal, 7).multiply(212))
+    .add(tPM(subtropicalBasal, 6).multiply(213))
+    .add(tPM(subtropicalBasal, 5).multiply(214))
+    .add(tPM(subtropicalBasal, 4).multiply(215))
+    .add(tPM(subtropicalBasal, 3).multiply(216))
+    .add(subtropicalBasal.multiply(chSW.lte(2)).multiply(217))
+
+    // ── SUBTROPICAL LOWER MONTANE ────────────────────────────────────
     .add(subtropicalLowerMontane.multiply(chSW.gt(7)).multiply(221))
     .add(tPM(subtropicalLowerMontane, 7).multiply(222))
     .add(tPM(subtropicalLowerMontane, 6).multiply(223))
@@ -247,91 +267,115 @@ var holdridgeLifeZones = function(startYear, endYear) {
     .add(tPM(subtropicalLowerMontane, 4).multiply(225))
     .add(tPM(subtropicalLowerMontane, 3).multiply(226))
     .add(subtropicalLowerMontane.multiply(chSW.lte(2)).multiply(227))
-    // Subtropical Montane
+
+    // ── SUBTROPICAL MONTANE ──────────────────────────────────────────
     .add(subtropicalMontane.multiply(chC.gt(6)).multiply(231))
     .add(subtropicalMontane.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(232))
     .add(subtropicalMontane.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(233))
     .add(subtropicalMontane.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(234))
     .add(subtropicalMontane.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(235))
     .add(subtropicalMontane.multiply(chC.lte(2)).multiply(236))
-    // Subtropical Subalpine
+
+    // ── SUBTROPICAL SUBALPINE ────────────────────────────────────────
     .add(subtropicalSubalpine.multiply(chB.gt(5)).multiply(241))
     .add(subtropicalSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(242))
     .add(subtropicalSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(243))
     .add(subtropicalSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(244))
     .add(subtropicalSubalpine.multiply(chB.lte(2)).multiply(245))
-    // Subtropical Alpine
+
+    // ── SUBTROPICAL ALPINE ───────────────────────────────────────────
     .add(subtropicalAlpine.multiply(chSP.gt(4)).multiply(251))
     .add(subtropicalAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(252))
     .add(subtropicalAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(253))
     .add(subtropicalAlpine.multiply(chSP.lte(2)).multiply(254))
+
+    // ── SUBTROPICAL NIVAL ────────────────────────────────────────────
     .add(subtropicalNival.multiply(261))
-    // Warm Temperate Lower Montane
-    .add(warmTemperateLowerMontane.multiply(chSW.gt(7)).multiply(311))
-    .add(tPM(warmTemperateLowerMontane, 7).multiply(312))
-    .add(tPM(warmTemperateLowerMontane, 6).multiply(313))
-    .add(tPM(warmTemperateLowerMontane, 5).multiply(314))
-    .add(tPM(warmTemperateLowerMontane, 4).multiply(315))
-    .add(tPM(warmTemperateLowerMontane, 3).multiply(316))
-    .add(warmTemperateLowerMontane.multiply(chSW.lte(2)).multiply(317))
-    // Warm Temperate Montane
+
+    // ── WARM TEMPERATE BASAL ─────────────────────────────────────────
+    .add(warmTemperateBasal.multiply(chSW.gt(7)).multiply(311))
+    .add(tPM(warmTemperateBasal, 7).multiply(312))
+    .add(tPM(warmTemperateBasal, 6).multiply(313))
+    .add(tPM(warmTemperateBasal, 5).multiply(314))
+    .add(tPM(warmTemperateBasal, 4).multiply(315))
+    .add(tPM(warmTemperateBasal, 3).multiply(316))
+    .add(warmTemperateBasal.multiply(chSW.lte(2)).multiply(317))
+
+    // ── WARM TEMPERATE MONTANE ───────────────────────────────────────
     .add(warmTemperateMontane.multiply(chC.gt(6)).multiply(321))
     .add(warmTemperateMontane.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(322))
     .add(warmTemperateMontane.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(323))
     .add(warmTemperateMontane.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(324))
     .add(warmTemperateMontane.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(325))
     .add(warmTemperateMontane.multiply(chC.lte(2)).multiply(326))
-    // Warm Temperate Subalpine
+
+    // ── WARM TEMPERATE SUBALPINE ─────────────────────────────────────
     .add(warmTemperateSubalpine.multiply(chB.gt(5)).multiply(331))
     .add(warmTemperateSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(332))
     .add(warmTemperateSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(333))
     .add(warmTemperateSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(334))
     .add(warmTemperateSubalpine.multiply(chB.lte(2)).multiply(335))
-    // Warm Temperate Alpine
+
+    // ── WARM TEMPERATE ALPINE ────────────────────────────────────────
     .add(warmTemperateAlpine.multiply(chSP.gt(4)).multiply(341))
     .add(warmTemperateAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(342))
     .add(warmTemperateAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(343))
     .add(warmTemperateAlpine.multiply(chSP.lte(2)).multiply(344))
+
+    // ── WARM TEMPERATE NIVAL ─────────────────────────────────────────
     .add(warmTemperateNival.multiply(351))
-    // Cool Temperate Montane
-    .add(coolTemperateMontane.multiply(chC.gt(6)).multiply(411))
-    .add(coolTemperateMontane.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(412))
-    .add(coolTemperateMontane.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(413))
-    .add(coolTemperateMontane.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(414))
-    .add(coolTemperateMontane.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(415))
-    .add(coolTemperateMontane.multiply(chC.lte(2)).multiply(416))
-    // Cool Temperate Subalpine
+
+    // ── COOL TEMPERATE BASAL ─────────────────────────────────────────
+    .add(coolTemperateBasal.multiply(chC.gt(6)).multiply(411))
+    .add(coolTemperateBasal.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(412))
+    .add(coolTemperateBasal.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(413))
+    .add(coolTemperateBasal.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(414))
+    .add(coolTemperateBasal.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(415))
+    .add(coolTemperateBasal.multiply(chC.lte(2)).multiply(416))
+
+    // ── COOL TEMPERATE SUBALPINE ─────────────────────────────────────
     .add(coolTemperateSubalpine.multiply(chB.gt(5)).multiply(421))
     .add(coolTemperateSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(422))
     .add(coolTemperateSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(423))
     .add(coolTemperateSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(424))
     .add(coolTemperateSubalpine.multiply(chB.lte(2)).multiply(425))
-    // Cool Temperate Alpine
+
+    // ── COOL TEMPERATE ALPINE ────────────────────────────────────────
     .add(coolTemperateAlpine.multiply(chSP.gt(4)).multiply(431))
     .add(coolTemperateAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(432))
     .add(coolTemperateAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(433))
     .add(coolTemperateAlpine.multiply(chSP.lte(2)).multiply(434))
+
+    // ── COOL TEMPERATE NIVAL ─────────────────────────────────────────
     .add(coolTemperateNival.multiply(441))
-    // Boreal Subalpine
-    .add(borealSubalpine.multiply(chB.gt(5)).multiply(511))
-    .add(borealSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(512))
-    .add(borealSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(513))
-    .add(borealSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(514))
-    .add(borealSubalpine.multiply(chB.lte(2)).multiply(515))
-    // Boreal Alpine
+
+    // ── BOREAL BASAL ─────────────────────────────────────────────────
+    .add(borealBasal.multiply(chB.gt(5)).multiply(511))
+    .add(borealBasal.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(512))
+    .add(borealBasal.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(513))
+    .add(borealBasal.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(514))
+    .add(borealBasal.multiply(chB.lte(2)).multiply(515))
+
+    // ── BOREAL ALPINE ────────────────────────────────────────────────
     .add(borealAlpine.multiply(chSP.gt(4)).multiply(521))
     .add(borealAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(522))
     .add(borealAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(523))
     .add(borealAlpine.multiply(chSP.lte(2)).multiply(524))
+
+    // ── BOREAL NIVAL ─────────────────────────────────────────────────
     .add(borealNival.multiply(531))
-    // Subpolar Alpine
-    .add(subpolarAlpine.multiply(chSP.gt(4)).multiply(611))
-    .add(subpolarAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(612))
-    .add(subpolarAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(613))
-    .add(subpolarAlpine.multiply(chSP.lte(2)).multiply(614))
+
+    // ── SUBPOLAR BASAL ───────────────────────────────────────────────
+    .add(subpolarBasal.multiply(chSP.gt(4)).multiply(611))
+    .add(subpolarBasal.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(612))
+    .add(subpolarBasal.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(613))
+    .add(subpolarBasal.multiply(chSP.lte(2)).multiply(614))
+
+    // ── SUBPOLAR NIVAL ───────────────────────────────────────────────
     .add(subpolarNival.multiply(621))
-    // Polar
-    .add(polarNival.multiply(711))
+
+    // ── POLAR ────────────────────────────────────────────────────────
+    .add(polarZone.multiply(711))
   );
 };
 

@@ -166,8 +166,10 @@ function PatternTileLayer({ patternUrl, opacity }) {
               if (px % 4 === 0) {
                 od[i] = 0; od[i+1] = 0; od[i+2] = 0; od[i+3] = 140;
               }
-            } else if (r > 200 && g > 120 && b < 120) {
-              // Points (orange) — grid of dots every 6 px
+            } else if (r > 200 && g > 120 && g < 210 && b < 120) {
+              // Points (orange #FFA500) — grid of dots every 6 px.
+              // Note: g<210 keeps pure yellow (255,255,0) out of this branch
+              // so nival pixels reach the star branch below.
               if (px % 6 === 0 && py % 6 === 0) {
                 od[i] = 0; od[i+1] = 0; od[i+2] = 0; od[i+3] = 170;
               }
@@ -258,9 +260,9 @@ function getZonePattern(value) {
       if (t === 5) return 'snowflake';
       return null;
 
-    case 4: // Cool temperate
+    case 4: // Cool temperate: t=2 is subalpine (X), t=3 is alpine (points)
       if (t === 1) return null;
-      if (t === 2) return 'vertical';
+      if (t === 2) return 'x';
       if (t === 3) return 'points';
       if (t === 4) return 'snowflake';
       return null;

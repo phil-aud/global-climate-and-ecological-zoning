@@ -17,34 +17,20 @@ function ZonePanel({ coords, zoneData, bioData, onCoordsChange, onZoneDataUpdate
   // SVG viewBox: 0 0 1329.03 1033.73
   // x-axis: LINEAR sea-level biotemperature 0°C (x=5.18) → 30°C (x=1091.83)
   // y-axis: linear elevation 0 m (y=884.91) → 5000 m (y=20.91)
-  // Frost line (Lugo et al. 1999): mean annual frost days > 0.5 → Warm Temperate,
-  //   ≤ 0.5 → Subtropical (same 12–24°C biotemperature band, split by measured frost).
-  //   When frost line applies and seaLevelBT is in the 12–24°C band, the dot is
-  //   placed at the 18°C boundary; a ghost dot shows the geometric sea-level position.
+  // Single marker: x from t0Bio, y from elevation. No frost-line / ghost-dot logic.
   const altMarker = useMemo(() => {
-    const seaLevelBT = parseFloat(bioData?.tBio0); // t0Bio from backend
+    const seaLevelBT = parseFloat(bioData?.t0Bio); // t0Bio from backend
     const elev = parseFloat(bioData?.elevation);
-    const frostDays = parseFloat(bioData?.frostDays); // mean annual frost days (GEE: cruFrsMonthlyMean().sum())
     if (isNaN(seaLevelBT) || isNaN(elev)) return null;
 
     const elevClamped = Math.max(0, Math.min(5000, elev));
     const y = 884.91 - (elevClamped / 5000) * (884.91 - 20.91);
 
-    // Frost line: > 0.5 mean annual frost days → Warm Temperate side of the 12–24°C band
-    // Only relevant when seaLevelBT falls in the shared 12–24°C band
-    const inSharedBand = seaLevelBT >= 12 && seaLevelBT < 24;
-    const frostLineApplies = inSharedBand && !isNaN(frostDays) && frostDays > 0.5;
+    const btClamped = Math.max(0, Math.min(30, seaLevelBT));
+    const x = 5.18 + (btClamped / 30) * (1091.83 - 5.18);
 
-    const btMain = frostLineApplies ? 18 : Math.max(0, Math.min(30, seaLevelBT));
-    const xMain = 5.18 + (btMain / 30) * (1091.83 - 5.18);
-
-    // Ghost position: geometric sea-level BT (only shown when frost line snaps dot to 18°C)
-    const xGhost = frostLineApplies
-      ? 5.18 + (Math.min(30, seaLevelBT) / 30) * (1091.83 - 5.18)
-      : null;
-
-    return { x: xMain, y, xGhost, frostLineApplies };
-  }, [bioData?.tBio0, bioData?.elevation, bioData?.frostDays]);
+    return { x, y };
+  }, [bioData?.t0Bio, bioData?.elevation]);
 
   useEffect(() => {
     if (!altBeltsExpanded) return;
@@ -133,7 +119,7 @@ function ZonePanel({ coords, zoneData, bioData, onCoordsChange, onZoneDataUpdate
             : '—'}
         </p>
         <p>
-          <strong><em>Mean annual biotemperature at sea-level (t0Bio):</em></strong> <em>{bioData?.tBio0 ?? '—'}°C</em>
+          <strong><em>Mean annual biotemperature at sea-level (t0Bio):</em></strong> <em>{bioData?.t0Bio ?? '—'}°C</em>
         </p>
         <p>
           <strong>Mean annual precipitation (P):</strong> {bioData?.precipitation ?? '—'} mm
@@ -180,26 +166,6 @@ function ZonePanel({ coords, zoneData, bioData, onCoordsChange, onZoneDataUpdate
             >
               {altMarker && (
                 <g>
-                  {/* Ghost dot: uncorrected geometric position (only when frost line applies) */}
-                  {altMarker.xGhost != null && (
-                    <g opacity="0.35">
-                      <circle cx={altMarker.xGhost} cy={altMarker.y} r="12" fill="orange" stroke="white" strokeWidth="2" />
-                      {/* Arrow from ghost toward main dot */}
-                      <defs>
-                        <marker id="arrowhead" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
-                          <path d="M0,0 L0,6 L6,3 z" fill="orange" />
-                        </marker>
-                      </defs>
-                      <line
-                        x1={altMarker.xGhost - 16} y1={altMarker.y}
-                        x2={altMarker.x + 16} y2={altMarker.y}
-                        stroke="orange" strokeWidth="2.5"
-                        markerEnd="url(#arrowhead)"
-                        strokeDasharray="6,3"
-                      />
-                    </g>
-                  )}
-                  {/* Main dot: frost-corrected position */}
                   <circle cx={altMarker.x} cy={altMarker.y} r="28" fill="orange" fillOpacity="0.12" stroke="none" />
                   <circle cx={altMarker.x} cy={altMarker.y} r="20" fill="orange" fillOpacity="0.22" stroke="none" />
                   <circle cx={altMarker.x} cy={altMarker.y} r="12" fill="orange" stroke="white" strokeWidth="3" />
@@ -242,25 +208,6 @@ function ZonePanel({ coords, zoneData, bioData, onCoordsChange, onZoneDataUpdate
                 >
                   {altMarker && (
                     <g>
-                      {/* Ghost dot: uncorrected geometric position (only when frost line applies) */}
-                      {altMarker.xGhost != null && (
-                        <g opacity="0.35">
-                          <circle cx={altMarker.xGhost} cy={altMarker.y} r="12" fill="orange" stroke="white" strokeWidth="2" />
-                          <defs>
-                            <marker id="arrowhead-modal" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
-                              <path d="M0,0 L0,6 L6,3 z" fill="orange" />
-                            </marker>
-                          </defs>
-                          <line
-                            x1={altMarker.xGhost - 16} y1={altMarker.y}
-                            x2={altMarker.x + 16} y2={altMarker.y}
-                            stroke="orange" strokeWidth="2.5"
-                            markerEnd="url(#arrowhead-modal)"
-                            strokeDasharray="6,3"
-                          />
-                        </g>
-                      )}
-                      {/* Main dot: frost-corrected position */}
                       <circle cx={altMarker.x} cy={altMarker.y} r="28" fill="orange" fillOpacity="0.12" stroke="none" />
                       <circle cx={altMarker.x} cy={altMarker.y} r="20" fill="orange" fillOpacity="0.22" stroke="none" />
                       <circle cx={altMarker.x} cy={altMarker.y} r="12" fill="orange" stroke="white" strokeWidth="3" />

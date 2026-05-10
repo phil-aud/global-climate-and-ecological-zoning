@@ -6,9 +6,9 @@
  * For CRU:
  *   tBio = mean annual biotemperature at actual elevation: monthly CRU temps clamped to
  *   [0, 30] °C, averaged over 12 months. Sampled at scale: 5000 (matching App_GEZGCZ.js).
- *   t0Bio = sea-level biotemperature: tBio + (tBio > 0) * (elevation/1000) * 6*cos(lat),
+ *   t0Bio = sea-level biotemperature: tBio + (tBio > 0) * (elevation/1000) * 6,
  *   where elevation is sampled from GTOPO30 at its native scale (~927 m) and the lapse
- *   rate 6·cos(lat) °C/km is computed in JS from the requested latitude.
+ *   rate is the constant Holdridge value 6 °C/km (constantLapseRate variant).
  *
  * For TerraClimate:
  *   Uses IDAHO_EPSCOR/TERRACLIMATE collection. Mean temp = (tmmn + tmmx) × 0.05.
@@ -123,7 +123,7 @@ async function getBioecologicalData(lon, lat, startYear, endYear, dataset = 'cru
     const petRatio = precip > 0 ? petVal / precip : 0;
 
     const elevVal   = elevResult?.elevation ?? 0;
-    const lapseRate = 6 * Math.cos(lat * Math.PI / 180);
+    const lapseRate = 6;
     const t0BioVal  = tBioVal > 0 ? tBioVal + (elevVal / 1000) * lapseRate : tBioVal;
 
     return {
@@ -242,9 +242,9 @@ async function getBioecologicalData(lon, lat, startYear, endYear, dataset = 'cru
   const tBioVal = result.biotemperature;  // tBio at actual elevation
   const elevVal  = result.elevation ?? 0;
 
-  // t0Bio = sea-level biotemperature using dynamic lapse rate: 6·cos(lat) °C/km.
+  // t0Bio = sea-level biotemperature using constant Holdridge lapse rate: 6 °C/km.
   // Only applied where tBio > 0 (avoids skewing cold/frozen locations).
-  const lapseRate = 6 * Math.cos(lat * Math.PI / 180);
+  const lapseRate = 6;
   const t0BioVal  = tBioVal > 0 ? tBioVal + (elevVal / 1000) * lapseRate : tBioVal;
 
   return {

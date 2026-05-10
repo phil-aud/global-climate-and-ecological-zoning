@@ -65,9 +65,10 @@ function GlobalClimateZonesTriangle({ bioData }) {
   }, [expanded]);
 
   // ── Reference biotemperature line ────────────────────────────────────────────
+  // GCZ pyramid uses tBio (mean annual biotemperature at elevation), not the sea-level t0Bio.
   const refBiotempLine = useMemo(() => {
-    const tBioSL = parseFloat(bioData?.t0Bio);          // t0Bio — sea-level value for triangle axis
-    const tBioElev = parseFloat(bioData?.biotemperature); // actual tBio at elevation — for label
+    const tBioSL = parseFloat(bioData?.biotemperature); // tBio — biotemperature at elevation, used for triangle axis
+    const tBioElev = tBioSL;                            // same value used for label
     if (!tBioSL || isNaN(tBioSL)) return null;
     const btClamped = Math.max(1.5, Math.min(48, tBioSL));
     const f = Math.log2(btClamped / 1.5) / Math.log2(48 / 1.5);
@@ -79,7 +80,7 @@ function GlobalClimateZonesTriangle({ bioData }) {
     const x2 = IMG2_APEX.x + (IMG2_BR.x - IMG2_APEX.x) * t;
     const labelBt = !isNaN(tBioElev) ? tBioElev : tBioSL;
     return { x1, y1: yClipped, x2, y2: yClipped, label: `${Math.round(labelBt * 10) / 10}° (tBio)` };
-  }, [bioData?.t0Bio, bioData?.biotemperature]);
+  }, [bioData?.biotemperature]);
 
   // ── Reference precipitation line ─────────────────────────────────────────────
   // Starts at the base, goes parallel to the left side (BL → APEX), ends on right side.

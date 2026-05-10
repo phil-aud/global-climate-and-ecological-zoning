@@ -312,9 +312,10 @@ function HoldridgeTriangle({ bioData, imgSrc, hideReference = false, title = 'Ho
   }, []);
 
   // Reference biotemperature line — driven by bioData, computed in pyramid1.svg coordinate space
+  // GEZ/HLZ pyramids use tBio (mean annual biotemperature at elevation), not the sea-level t0Bio.
   const refBiotempLine = useMemo(() => {
-    const tBioSL = parseFloat(bioData?.t0Bio);          // t0Bio — sea-level value for triangle axis
-    const tBioElev = parseFloat(bioData?.biotemperature); // actual tBio at elevation — for label
+    const tBioSL = parseFloat(bioData?.biotemperature); // tBio — biotemperature at elevation, used for triangle axis
+    const tBioElev = tBioSL;                            // same value used for label
     if (!tBioSL || isNaN(tBioSL)) return null;
     // Extend geometric progression one octave past 24° → 48°
     // Spacing in pyramid1.svg is 82px per octave (doubling); 48° extrapolates to y=994.63
@@ -331,7 +332,7 @@ function HoldridgeTriangle({ bioData, imgSrc, hideReference = false, title = 'Ho
     const x2 = IMG_APEX.x + (IMG_BR.x - IMG_APEX.x) * t;
     const labelBt = !isNaN(tBioElev) ? tBioElev : tBioSL;
     return { x1, y1: yClipped, x2, y2: yClipped, label: `${Math.round(labelBt * 10) / 10}° (tBio)` };
-  }, [bioData?.t0Bio, bioData?.biotemperature]);
+  }, [bioData?.biotemperature]);
 
   // Reference precipitation line — diagonal parallel to LEFT side (60° from base)
   // Precipitation tick marks are along the BASE of the triangle in pyramid1.svg.

@@ -345,46 +345,63 @@ const HLZIII_FROM_VALUES = [
   711,
 ];
 
+// Pattern codes (7-way):
+// 0 = basal (no symbol)
+// 1 = premontane -> right-diagonal hatch
+// 2 = lower montane -> left-diagonal hatch
+// 3 = montane -> vertical lines
+// 4 = subalpine -> X (both diagonals)
+// 5 = alpine -> points
+// 6 = nival -> stars
 const HLZIII_TO_PATTERNS = [
-  0,0,0,0,0,0,0,0,   // 111-118 no pattern
-  3,3,3,3,3,3,3,     // 121-127 cross-hatch
-  2,2,2,2,2,2,2,     // 131-137 hatch
-  2,2,2,2,2,2,       // 141-146 hatch
-  1,1,1,1,1,         // 151-155 stipple
-  1,1,1,1,           // 161-164 stipple
-  4,                 // 171     nival
-  0,0,0,0,0,0,0,     // 211-217 no pattern
-  2,2,2,2,2,2,2,     // 221-227 hatch
-  0,0,0,0,0,0,       // 231-236 no pattern
-  0,0,0,0,0,         // 241-245 no pattern
-  0,0,0,0,           // 251-254 no pattern
-  4,                 // 261     nival
-  0,0,0,0,0,0,0,     // 311-317 no pattern
-  2,2,2,2,2,2,       // 321-326 hatch
-  1,1,1,1,1,         // 331-335 stipple
-  1,1,1,1,           // 341-344 stipple
-  4,                 // 351     nival
-  0,0,0,0,0,0,       // 411-416 no pattern
-  1,1,1,1,1,         // 421-425 stipple
-  1,1,1,1,           // 431-434 stipple
-  4,                 // 441     nival
-  0,0,0,0,0,         // 511-515 no pattern
-  1,1,1,1,           // 521-524 stipple
-  4,                 // 531     nival
-  0,0,0,0,           // 611-614 no pattern
-  4,                 // 621     nival
-  0,                 // 711     no pattern
+  // Tropical
+  0,0,0,0,0,0,0,0,   // 111-118 basal
+  1,1,1,1,1,1,1,     // 121-127 premontane (right-diag)
+  2,2,2,2,2,2,2,     // 131-137 lower montane (left-diag)
+  3,3,3,3,3,3,       // 141-146 montane (X)
+  4,4,4,4,4,         // 151-155 subalpine (vertical)
+  5,5,5,5,           // 161-164 alpine (points)
+  6,                 // 171 nival (stars)
+  // Subtropical
+  0,0,0,0,0,0,0,     // 211-217 basal
+  2,2,2,2,2,2,2,     // 221-227 lower montane (left-hatch)
+  3,3,3,3,3,3,       // 231-236 montane (X)
+  4,4,4,4,4,         // 241-245 subalpine (vertical)
+  5,5,5,5,           // 251-254 alpine (points)
+  6,                 // 261 nival (stars)
+  // Warm Temperate
+  0,0,0,0,0,0,0,     // 311-317 basal
+  3,3,3,3,3,3,       // 321-326 montane (X)
+  4,4,4,4,4,         // 331-335 subalpine (vertical)
+  5,5,5,5,           // 341-344 alpine (points)
+  6,                 // 351 nival (stars)
+  // Cool Temperate
+  0,0,0,0,0,0,       // 411-416 basal
+  4,4,4,4,4,         // 421-425 subalpine (vertical)
+  5,5,5,5,           // 431-434 alpine (points)
+  6,                 // 441 nival (stars)
+  // Boreal
+  0,0,0,0,0,         // 511-515 basal
+  5,5,5,5,           // 521-524 alpine (points)
+  6,                 // 531 nival (stars)
+  // Subpolar
+  0,0,0,0,           // 611-614 basal
+  6,                 // 621 nival (stars)
+  // Polar
+  0,                 // 711 polar basal
 ];
 
-// SLD applied to the remapped pattern-category image (values 0-4)
+// SLD applied to the remapped pattern-category image (values 0-6)
 const SLD_HLZIII_PATTERN =
   '<RasterSymbolizer>' +
     '<ColorMap type="intervals" extended="false">' +
       '<ColorMapEntry color="#FFFFFF" quantity="0" label="no pattern"/>' +
-      '<ColorMapEntry color="#FF0000" quantity="1" label="stipple"/>' +
-      '<ColorMapEntry color="#00FF00" quantity="2" label="hatch"/>' +
-      '<ColorMapEntry color="#0000FF" quantity="3" label="cross-hatch"/>' +
-      '<ColorMapEntry color="#FFFF00" quantity="4" label="nival"/>' +
+      '<ColorMapEntry color="#FF0000" quantity="1" label="premontane"/>' +
+      '<ColorMapEntry color="#00FF00" quantity="2" label="lower-montane"/>' +
+      '<ColorMapEntry color="#0000FF" quantity="3" label="montane"/>' +
+      '<ColorMapEntry color="#FF00FF" quantity="4" label="subalpine"/>' +
+      '<ColorMapEntry color="#FFA500" quantity="5" label="alpine"/>' +
+      '<ColorMapEntry color="#FFFF00" quantity="6" label="nival"/>' +
     '</ColorMap>' +
   '</RasterSymbolizer>';
 

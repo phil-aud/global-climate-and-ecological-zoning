@@ -144,41 +144,49 @@ function _buildHLZImage(t0Bio, hasFrost, annualPrecip, annualPet, elevation) {
   const subpolar      = t0Bio.gte(1.5).multiply(t0Bio.lt(3));
   const polar         = t0Bio.gte(0).multiply(t0Bio.lt(1.5));
 
-  // ── Altitudinal belts ──
+  // ── Altitudinal belts (dynamic baselines calculated from sea-level biotemperature) ──
   const el = elevation;
+  const k = 1000 / 6; // m per °C
 
-  const tropicalBasal        = tropical.multiply(el.lte(1000));
-  const tropicalPremontane   = tropical.multiply(el.gt(1000).multiply(el.lte(2000)));
-  const tropicalLowerMontane = tropical.multiply(el.gt(2000).multiply(el.lte(3000)));
-  const tropicalMontane      = tropical.multiply(el.gt(3000).multiply(el.lte(4000)));
-  const tropicalSubalpine    = tropical.multiply(el.gt(4000).multiply(el.lte(4500)));
-  const tropicalAlpine       = tropical.multiply(el.gt(4500).multiply(el.lte(4750)));
-  const tropicalNival        = tropical.multiply(el.gt(4750));
+  const trop_base = t0Bio.subtract(24).multiply(k);
+  const subt_base = t0Bio.subtract(18).multiply(k);
+  const wt_base   = t0Bio.subtract(12).multiply(k);
+  const ct_base   = t0Bio.subtract(6).multiply(k);
+  const bor_base  = t0Bio.subtract(3).multiply(k);
+  const sp_base   = t0Bio.subtract(1.5).multiply(k);
 
-  const subtropicalPremontane   = subtropical.multiply(el.lte(1000));
-  const subtropicalLowerMontane = subtropical.multiply(el.gt(1000).multiply(el.lte(2000)));
-  const subtropicalMontane      = subtropical.multiply(el.gt(2000).multiply(el.lte(3000)));
-  const subtropicalSubalpine    = subtropical.multiply(el.gt(3000).multiply(el.lte(3500)));
-  const subtropicalAlpine       = subtropical.multiply(el.gt(3500).multiply(el.lte(3750)));
-  const subtropicalNival        = subtropical.multiply(el.gt(3750));
+  const tropicalBasal        = tropical.multiply(el.lte(trop_base));
+  const tropicalPremontane   = tropical.multiply(el.gt(trop_base).and(el.lte(trop_base.add(1000))));
+  const tropicalLowerMontane = tropical.multiply(el.gt(trop_base.add(1000)).and(el.lte(trop_base.add(2000))));
+  const tropicalMontane      = tropical.multiply(el.gt(trop_base.add(2000)).and(el.lte(trop_base.add(3000))));
+  const tropicalSubalpine    = tropical.multiply(el.gt(trop_base.add(3000)).and(el.lte(trop_base.add(4000))));
+  const tropicalAlpine       = tropical.multiply(el.gt(trop_base.add(4000)).and(el.lte(trop_base.add(4500))));
+  const tropicalNival        = tropical.multiply(el.gt(trop_base.add(4500)));
 
-  const warmTemperateLowerMontane = warmTemperate.multiply(el.lte(1000));
-  const warmTemperateMontane      = warmTemperate.multiply(el.gt(1000).multiply(el.lte(2000)));
-  const warmTemperateSubalpine    = warmTemperate.multiply(el.gt(2000).multiply(el.lte(2500)));
-  const warmTemperateAlpine       = warmTemperate.multiply(el.gt(2500).multiply(el.lte(2750)));
-  const warmTemperateNival        = warmTemperate.multiply(el.gt(2750));
+  const subtropicalPremontane   = subtropical.multiply(el.lte(subt_base));
+  const subtropicalLowerMontane = subtropical.multiply(el.gt(subt_base).and(el.lte(subt_base.add(1000))));
+  const subtropicalMontane      = subtropical.multiply(el.gt(subt_base.add(1000)).and(el.lte(subt_base.add(2000))));
+  const subtropicalSubalpine    = subtropical.multiply(el.gt(subt_base.add(2000)).and(el.lte(subt_base.add(3000))));
+  const subtropicalAlpine       = subtropical.multiply(el.gt(subt_base.add(3000)).and(el.lte(subt_base.add(3500))));
+  const subtropicalNival        = subtropical.multiply(el.gt(subt_base.add(3500)));
 
-  const coolTemperateMontane   = coolTemperate.multiply(el.lte(1000));
-  const coolTemperateSubalpine = coolTemperate.multiply(el.gt(1000).multiply(el.lte(1500)));
-  const coolTemperateAlpine    = coolTemperate.multiply(el.gt(1500).multiply(el.lte(1750)));
-  const coolTemperateNival     = coolTemperate.multiply(el.gt(1750));
+  const warmTemperateLowerMontane = warmTemperate.multiply(el.lte(wt_base));
+  const warmTemperateMontane      = warmTemperate.multiply(el.gt(wt_base).and(el.lte(wt_base.add(1000))));
+  const warmTemperateSubalpine    = warmTemperate.multiply(el.gt(wt_base.add(1000)).and(el.lte(wt_base.add(1500))));
+  const warmTemperateAlpine       = warmTemperate.multiply(el.gt(wt_base.add(1500)).and(el.lte(wt_base.add(1750))));
+  const warmTemperateNival        = warmTemperate.multiply(el.gt(wt_base.add(1750)));
 
-  const borealSubalpine = boreal.multiply(el.lte(500));
-  const borealAlpine    = boreal.multiply(el.gt(500).multiply(el.lte(750)));
-  const borealNival     = boreal.multiply(el.gt(750));
+  const coolTemperateMontane   = coolTemperate.multiply(el.lte(ct_base));
+  const coolTemperateSubalpine = coolTemperate.multiply(el.gt(ct_base).and(el.lte(ct_base.add(500))));
+  const coolTemperateAlpine    = coolTemperate.multiply(el.gt(ct_base.add(500)).and(el.lte(ct_base.add(750))));
+  const coolTemperateNival     = coolTemperate.multiply(el.gt(ct_base.add(750)));
 
-  const subpolarAlpine = subpolar.multiply(el.lte(250));
-  const subpolarNival  = subpolar.multiply(el.gt(250));
+  const borealSubalpine = boreal.multiply(el.lte(bor_base.add(500)));
+  const borealAlpine    = boreal.multiply(el.gt(bor_base.add(500)).and(el.lte(bor_base.add(750))));
+  const borealNival     = boreal.multiply(el.gt(bor_base.add(750)));
+
+  const subpolarAlpine = subpolar.multiply(el.lte(sp_base.add(250)));
+  const subpolarNival  = subpolar.multiply(el.gt(sp_base.add(250)));
 
   const polarNival = polar;
 

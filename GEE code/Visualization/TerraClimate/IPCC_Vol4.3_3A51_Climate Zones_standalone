@@ -119,40 +119,49 @@ var holdridgeLifeZones = function(startYear, endYear) {
   var subpolar      = t0Bio.gte(1.5).multiply(t0Bio.lt(3));
   var polar         = t0Bio.gte(0).multiply(t0Bio.lt(1.5));
 
-  // -- Altitudinal belts --
+  // -- Altitudinal belts (dynamic baselines calculated from sea-level biotemperature) --
   var el = elevation;
-  var tropicalBasal        = tropical.multiply(el.lte(1000));
-  var tropicalPremontane   = tropical.multiply(el.gt(1000).multiply(el.lte(2000)));
-  var tropicalLowerMontane = tropical.multiply(el.gt(2000).multiply(el.lte(3000)));
-  var tropicalMontane      = tropical.multiply(el.gt(3000).multiply(el.lte(4000)));
-  var tropicalSubalpine    = tropical.multiply(el.gt(4000).multiply(el.lte(4500)));
-  var tropicalAlpine       = tropical.multiply(el.gt(4500).multiply(el.lte(4750)));
-  var tropicalNival        = tropical.multiply(el.gt(4750));
+  var k = 1000 / 6; // m per °C (approx. 166.667)
 
-  var subtropicalPremontane   = subtropical.multiply(el.lte(1000));
-  var subtropicalLowerMontane = subtropical.multiply(el.gt(1000).multiply(el.lte(2000)));
-  var subtropicalMontane      = subtropical.multiply(el.gt(2000).multiply(el.lte(3000)));
-  var subtropicalSubalpine    = subtropical.multiply(el.gt(3000).multiply(el.lte(3500)));
-  var subtropicalAlpine       = subtropical.multiply(el.gt(3500).multiply(el.lte(3750)));
-  var subtropicalNival        = subtropical.multiply(el.gt(3750));
+  var trop_base = t0Bio.subtract(24).multiply(k);
+  var subt_base = t0Bio.subtract(18).multiply(k);
+  var wt_base   = t0Bio.subtract(12).multiply(k);
+  var ct_base   = t0Bio.subtract(6).multiply(k);
+  var bor_base  = t0Bio.subtract(3).multiply(k);
+  var sp_base   = t0Bio.subtract(1.5).multiply(k);
 
-  var warmTemperateLowerMontane = warmTemperate.multiply(el.lte(1000));
-  var warmTemperateMontane      = warmTemperate.multiply(el.gt(1000).multiply(el.lte(2000)));
-  var warmTemperateSubalpine    = warmTemperate.multiply(el.gt(2000).multiply(el.lte(2500)));
-  var warmTemperateAlpine       = warmTemperate.multiply(el.gt(2500).multiply(el.lte(2750)));
-  var warmTemperateNival        = warmTemperate.multiply(el.gt(2750));
+  var tropicalBasal        = tropical.multiply(el.lte(trop_base));
+  var tropicalPremontane   = tropical.multiply(el.gt(trop_base).and(el.lte(trop_base.add(1000))));
+  var tropicalLowerMontane = tropical.multiply(el.gt(trop_base.add(1000)).and(el.lte(trop_base.add(2000))));
+  var tropicalMontane      = tropical.multiply(el.gt(trop_base.add(2000)).and(el.lte(trop_base.add(3000))));
+  var tropicalSubalpine    = tropical.multiply(el.gt(trop_base.add(3000)).and(el.lte(trop_base.add(4000))));
+  var tropicalAlpine       = tropical.multiply(el.gt(trop_base.add(4000)).and(el.lte(trop_base.add(4500))));
+  var tropicalNival        = tropical.multiply(el.gt(trop_base.add(4500)));
 
-  var coolTemperateMontane   = coolTemperate.multiply(el.lte(1000));
-  var coolTemperateSubalpine = coolTemperate.multiply(el.gt(1000).multiply(el.lte(1500)));
-  var coolTemperateAlpine    = coolTemperate.multiply(el.gt(1500).multiply(el.lte(1750)));
-  var coolTemperateNival     = coolTemperate.multiply(el.gt(1750));
+  var subtropicalPremontane   = subtropical.multiply(el.lte(subt_base));
+  var subtropicalLowerMontane = subtropical.multiply(el.gt(subt_base).and(el.lte(subt_base.add(1000))));
+  var subtropicalMontane      = subtropical.multiply(el.gt(subt_base.add(1000)).and(el.lte(subt_base.add(2000))));
+  var subtropicalSubalpine    = subtropical.multiply(el.gt(subt_base.add(2000)).and(el.lte(subt_base.add(3000))));
+  var subtropicalAlpine       = subtropical.multiply(el.gt(subt_base.add(3000)).and(el.lte(subt_base.add(3500))));
+  var subtropicalNival        = subtropical.multiply(el.gt(subt_base.add(3500)));
 
-  var borealSubalpine = boreal.multiply(el.lte(500));
-  var borealAlpine    = boreal.multiply(el.gt(500).multiply(el.lte(750)));
-  var borealNival     = boreal.multiply(el.gt(750));
+  var warmTemperateLowerMontane = warmTemperate.multiply(el.lte(wt_base));
+  var warmTemperateMontane      = warmTemperate.multiply(el.gt(wt_base).and(el.lte(wt_base.add(1000))));
+  var warmTemperateSubalpine    = warmTemperate.multiply(el.gt(wt_base.add(1000)).and(el.lte(wt_base.add(1500))));
+  var warmTemperateAlpine       = warmTemperate.multiply(el.gt(wt_base.add(1500)).and(el.lte(wt_base.add(1750))));
+  var warmTemperateNival        = warmTemperate.multiply(el.gt(wt_base.add(1750)));
 
-  var subpolarAlpine = subpolar.multiply(el.lte(250));
-  var subpolarNival  = subpolar.multiply(el.gt(250));
+  var coolTemperateMontane   = coolTemperate.multiply(el.lte(ct_base));
+  var coolTemperateSubalpine = coolTemperate.multiply(el.gt(ct_base).and(el.lte(ct_base.add(500))));
+  var coolTemperateAlpine    = coolTemperate.multiply(el.gt(ct_base.add(500)).and(el.lte(ct_base.add(750))));
+  var coolTemperateNival     = coolTemperate.multiply(el.gt(ct_base.add(750)));
+
+  var borealSubalpine = boreal.multiply(el.lte(bor_base.add(500)));
+  var borealAlpine    = boreal.multiply(el.gt(bor_base.add(500)).and(el.lte(bor_base.add(750))));
+  var borealNival     = boreal.multiply(el.gt(bor_base.add(750)));
+
+  var subpolarAlpine = subpolar.multiply(el.lte(sp_base.add(250)));
+  var subpolarNival  = subpolar.multiply(el.gt(sp_base.add(250)));
 
   var polarNival = polar;
 

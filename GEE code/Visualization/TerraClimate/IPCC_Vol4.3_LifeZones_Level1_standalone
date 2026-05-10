@@ -161,8 +161,8 @@ var holdridgeLifeZones = function(startYear, endYear) {
                                  .and(el.lte(frostLineEl))));
   var tropicalMontane      = tropical.multiply(el.gt(trop_base.add(2000)).and(el.lte(trop_base.add(3000))));
   var tropicalSubalpine    = tropical.multiply(el.gt(trop_base.add(3000)).and(el.lte(trop_base.add(4000))));
-  var tropicalAlpine       = tropical.multiply(el.gt(trop_base.add(3500)).and(el.lte(trop_base.add(4500))));
-  var tropicalNival        = tropical.multiply(el.gt(trop_base.add(3750)));
+  var tropicalAlpine       = tropical.multiply(el.gt(trop_base.add(4000)).and(el.lte(trop_base.add(4500))));
+  var tropicalNival        = tropical.multiply(el.gt(trop_base.add(4500)));
 
   // ── SUBTROPICAL (x1 = 18) ────────────────────────────────────────
   var subtropicalBasal        = subtropical.multiply(el.lte(subt_base));

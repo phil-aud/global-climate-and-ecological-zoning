@@ -422,11 +422,23 @@ const SLD_SOIL =
 
 // ── Asset paths ──────────────────────────────────────────────────────────────
 
+// Precomputed assets for the default period 1995–2024.
+// Both CRU (CRU TS 4.09) and TerraClimate have published images for GCZ,
+// GEZ (HLZ Level 1), HLZ Level 2 and HLZ Level 3 — serving these directly
+// is much faster than recomputing the HLZ classification on-the-fly.
 const ASSETS = {
-  gcz:   'projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GlobalClimateZones_1995-2024_CRU409',
-  gez:   'projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GlobalEcologicalZones_HLZI_1995-2024_CRU409',
-  hlzII: 'projects/ee-philaudebert/assets/HoldridgeLifeZones/HLZII_1995-2024_CRU409',
-  hlzIII:'projects/ee-philaudebert/assets/HoldridgeLifeZones/HLZIII_1995-2024_CRU409',
+  cru: {
+    gcz:    'projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GlobalClimateZones_1995-2024_CRU409_final',
+    gez:    'projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GEZ_HLZ_Level1_CRU409_1995-2024_final',
+    hlzII:  'projects/ee-philaudebert/assets/HoldridgeLifeZones/HLZ_Level2_CRU409_1995-2024_final',
+    hlzIII: 'projects/ee-philaudebert/assets/HoldridgeLifeZones/HoldridgeLifeZones_Level3_CRU409_1995-2024_final',
+  },
+  terraclimate: {
+    gcz:    'projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GlobalClimateZones_1995-2024_TerraClimate',
+    gez:    'projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GEZ_HLZ_Level1_TerraClimate_1995-2024',
+    hlzII:  'projects/ee-philaudebert/assets/HoldridgeLifeZones/HLZ_Level2_TerraClimate_1995-2024',
+    hlzIII: 'projects/ee-philaudebert/assets/HoldridgeLifeZones/HoldridgeLifeZones_Level3_TerraClimate_1995-2024',
+  },
   soil:  'projects/ee-maidiesinitam/assets/soilTypes/ipccFromHWSD2',
 };
 
@@ -497,14 +509,20 @@ async function buildSoilTileUrl(ee) {
 }
 
 async function computeTileBundle(ee, dataset, startYear, endYear) {
-  // Fast path: when the requested CRU range exactly matches the published asset
+  // Fast path: when the requested range exactly matches the published asset
   // period, serve straight from the precomputed assets — much faster than
-  // recomputing the HLZ classification on-the-fly in GEE.
-  if (dataset === 'cru' && startYear === CRU_TILE_START && endYear === CRU_TILE_END) {
-    const gczAsset   = ee.Image(ASSETS.gcz);
-    const gezAsset   = ee.Image(ASSETS.gez);
-    const hlzIIAsset = ee.Image(ASSETS.hlzII);
-    const hlzIIIAsset = ee.Image(ASSETS.hlzIII);
+  // recomputing the HLZ classification on-the-fly in GEE. Both CRU and
+  // TerraClimate have published assets for 1995–2024.
+  const isDefaultRange =
+    (dataset === 'cru'          && startYear === CRU_TILE_START && endYear === CRU_TILE_END) ||
+    (dataset === 'terraclimate' && startYear === TC_TILE_START  && endYear === TC_TILE_END);
+
+  if (isDefaultRange) {
+    const a = ASSETS[dataset];
+    const gczAsset    = ee.Image(a.gcz);
+    const gezAsset    = ee.Image(a.gez);
+    const hlzIIAsset  = ee.Image(a.hlzII);
+    const hlzIIIAsset = ee.Image(a.hlzIII);
     const hlzIIIPatternImage = hlzIIIAsset.remap(HLZIII_FROM_VALUES, HLZIII_TO_PATTERNS, 0);
 
     const [gczMapId, gezMapId, hlzIIMapId, hlzIIIMapId, hlzIIIPatternMapId, soilUrl] = await Promise.all([

@@ -477,123 +477,96 @@ function buildTileUrl(mapId) {
 
 // ── Handler ──────────────────────────────────────────────────────────────────
 
-// In-memory cache for tile URL bundles. Keyed by `${dataset}:${startYear}:${endYear}`.
+// In-memory cache for individual layer tile URLs.
+// Keyed by `${dataset}:${startYear}:${endYear}:${layer}` (soil uses key `soil`).
 // EE map tile tokens stay valid for hours; we expire entries after 60 min so a
 // long-running server eventually refreshes them. Concurrent requests for the
 // same key share a single in-flight Promise to avoid duplicate GEE work.
 const TILE_CACHE_TTL_MS = 60 * 60 * 1000; // 60 minutes
-const tileCache = new Map();      // key -> { value, expiresAt }
-const inFlight  = new Map();      // key -> Promise
+const layerCache = new Map();     // layerKey -> { url, expiresAt }
+const layerInFlight = new Map();  // layerKey -> Promise<string>
 
-// Soil layer is invariant across years/datasets; cache it independently.
-let soilTileCache = null;         // { url, expiresAt }
-let soilInFlight  = null;         // Promise
+const ALL_LAYERS = ['gcz', 'gez', 'hlzII', 'hlzIII', 'hlzIIIPattern', 'soil'];
 
-async function buildSoilTileUrl(ee) {
-  const now = Date.now();
-  if (soilTileCache && soilTileCache.expiresAt > now) return soilTileCache.url;
-  if (soilInFlight) return soilInFlight;
-  soilInFlight = (async () => {
-    const soilImage = ee.Image(ASSETS.soil)
-      .remap([1,2,3,4,5,6,7,8,9,10,11,12,13],[7,1,2,8,7,4,8,3,8,5,6,8,8]);
-    const mapId = await getMapId(soilImage.sldStyle(SLD_SOIL));
-    const url = buildTileUrl(mapId);
-    soilTileCache = { url, expiresAt: Date.now() + TILE_CACHE_TTL_MS };
-    return url;
-  })();
-  try {
-    return await soilInFlight;
-  } finally {
-    soilInFlight = null;
-  }
+function layerCacheKey(layer, dataset, startYear, endYear) {
+  if (layer === 'soil') return 'soil'; // invariant across dataset/year
+  return `${dataset}:${startYear}:${endYear}:${layer}`;
 }
 
-async function computeTileBundle(ee, dataset, startYear, endYear) {
-  // Fast path: when the requested range exactly matches the published asset
-  // period, serve straight from the precomputed assets — much faster than
-  // recomputing the HLZ classification on-the-fly in GEE. Both CRU and
-  // TerraClimate have published assets for 1995–2024.
+// Build a single styled image for the given layer and parameters.
+function buildLayerImage(ee, layer, dataset, startYear, endYear) {
+  if (layer === 'soil') {
+    const soilImage = ee.Image(ASSETS.soil)
+      .remap([1,2,3,4,5,6,7,8,9,10,11,12,13],[7,1,2,8,7,4,8,3,8,5,6,8,8]);
+    return soilImage.sldStyle(SLD_SOIL);
+  }
+
   const isDefaultRange =
     (dataset === 'cru'          && startYear === CRU_TILE_START && endYear === CRU_TILE_END) ||
     (dataset === 'terraclimate' && startYear === TC_TILE_START  && endYear === TC_TILE_END);
 
+  // Fast path: serve directly from precomputed assets.
   if (isDefaultRange) {
     const a = ASSETS[dataset];
-    const gczAsset    = ee.Image(a.gcz);
-    const gezAsset    = ee.Image(a.gez);
-    const hlzIIAsset  = ee.Image(a.hlzII);
-    const hlzIIIAsset = ee.Image(a.hlzIII);
-    const hlzIIIPatternImage = hlzIIIAsset.remap(HLZIII_FROM_VALUES, HLZIII_TO_PATTERNS, 0);
-
-    const [gczMapId, gezMapId, hlzIIMapId, hlzIIIMapId, hlzIIIPatternMapId, soilUrl] = await Promise.all([
-      getMapId(gczAsset.sldStyle(SLD_GCZ)),
-      getMapId(gezAsset.sldStyle(SLD_GEZ)),
-      getMapId(hlzIIAsset.sldStyle(SLD_HLZII)),
-      getMapId(hlzIIIAsset.sldStyle(SLD_HLZIII)),
-      getMapId(hlzIIIPatternImage.sldStyle(SLD_HLZIII_PATTERN)),
-      buildSoilTileUrl(ee),
-    ]);
-
-    return {
-      gcz:           buildTileUrl(gczMapId),
-      gez:           buildTileUrl(gezMapId),
-      hlzII:         buildTileUrl(hlzIIMapId),
-      hlzIII:        buildTileUrl(hlzIIIMapId),
-      hlzIIIPattern: buildTileUrl(hlzIIIPatternMapId),
-      soil:          soilUrl,
-    };
+    if (layer === 'gcz')   return ee.Image(a.gcz).sldStyle(SLD_GCZ);
+    if (layer === 'gez')   return ee.Image(a.gez).sldStyle(SLD_GEZ);
+    if (layer === 'hlzII') return ee.Image(a.hlzII).sldStyle(SLD_HLZII);
+    if (layer === 'hlzIII') return ee.Image(a.hlzIII).sldStyle(SLD_HLZIII);
+    if (layer === 'hlzIIIPattern') {
+      return ee.Image(a.hlzIII)
+        .remap(HLZIII_FROM_VALUES, HLZIII_TO_PATTERNS, 0)
+        .sldStyle(SLD_HLZIII_PATTERN);
+    }
   }
 
-  if (dataset === 'terraclimate') {
-    const hlzImage = computeHLZ(startYear, endYear);
-    const gczImage   = hlzImage.remap(HLZ_FROM, GCZ_TO,  0);
-    const gezImage   = hlzImage.remap(HLZ_FROM, GEZ_TO,  0);
-    const hlzIIImage = hlzImage.remap(HLZ_FROM, HLZII_TO, 0);
-    const hlzIIIPatternImage = hlzImage.remap(HLZIII_FROM_VALUES, HLZIII_TO_PATTERNS, 0);
+  // On-the-fly compute path.
+  const hlzImage = dataset === 'terraclimate'
+    ? computeHLZ(startYear, endYear)
+    : computeHLZ_CRU(startYear, endYear);
 
-    const [gczMapId, gezMapId, hlzIIMapId, hlzIIIMapId, hlzIIIPatternMapId, soilUrl] = await Promise.all([
-      getMapId(gczImage.sldStyle(SLD_GCZ)),
-      getMapId(gezImage.sldStyle(SLD_GEZ)),
-      getMapId(hlzIIImage.sldStyle(SLD_HLZII)),
-      getMapId(hlzImage.sldStyle(SLD_HLZIII)),
-      getMapId(hlzIIIPatternImage.sldStyle(SLD_HLZIII_PATTERN)),
-      buildSoilTileUrl(ee),
-    ]);
-
-    return {
-      gcz:           buildTileUrl(gczMapId),
-      gez:           buildTileUrl(gezMapId),
-      hlzII:         buildTileUrl(hlzIIMapId),
-      hlzIII:        buildTileUrl(hlzIIIMapId),
-      hlzIIIPattern: buildTileUrl(hlzIIIPatternMapId),
-      soil:          soilUrl,
-    };
+  if (layer === 'gcz')    return hlzImage.remap(HLZ_FROM, GCZ_TO,  0).sldStyle(SLD_GCZ);
+  if (layer === 'gez')    return hlzImage.remap(HLZ_FROM, GEZ_TO,  0).sldStyle(SLD_GEZ);
+  if (layer === 'hlzII')  return hlzImage.remap(HLZ_FROM, HLZII_TO, 0).sldStyle(SLD_HLZII);
+  if (layer === 'hlzIII') return hlzImage.sldStyle(SLD_HLZIII);
+  if (layer === 'hlzIIIPattern') {
+    return hlzImage.remap(HLZIII_FROM_VALUES, HLZIII_TO_PATTERNS, 0).sldStyle(SLD_HLZIII_PATTERN);
   }
 
-  // CRU non-default range: compute on-the-fly using the inspector formula.
-  const hlzImageCRU = computeHLZ_CRU(startYear, endYear);
-  const gczImageCRU   = hlzImageCRU.remap(HLZ_FROM, GCZ_TO,  0);
-  const gezImageCRU   = hlzImageCRU.remap(HLZ_FROM, GEZ_TO,  0);
-  const hlzIIImageCRU = hlzImageCRU.remap(HLZ_FROM, HLZII_TO, 0);
-  const hlzIIIPatternImage = hlzImageCRU.remap(HLZIII_FROM_VALUES, HLZIII_TO_PATTERNS, 0);
+  throw new Error(`Unknown layer: ${layer}`);
+}
 
-  const [gczMapId, gezMapId, hlzIIMapId, hlzIIIMapId, hlzIIIPatternMapId, soilUrl] = await Promise.all([
-    getMapId(gczImageCRU.sldStyle(SLD_GCZ)),
-    getMapId(gezImageCRU.sldStyle(SLD_GEZ)),
-    getMapId(hlzIIImageCRU.sldStyle(SLD_HLZII)),
-    getMapId(hlzImageCRU.sldStyle(SLD_HLZIII)),
-    getMapId(hlzIIIPatternImage.sldStyle(SLD_HLZIII_PATTERN)),
-    buildSoilTileUrl(ee),
-  ]);
+// Resolve a single layer URL — uses cache + coalesces concurrent requests.
+function getLayerUrl(ee, layer, dataset, startYear, endYear) {
+  const key = layerCacheKey(layer, dataset, startYear, endYear);
+  const now = Date.now();
+  const cached = layerCache.get(key);
+  if (cached && cached.expiresAt > now) return Promise.resolve(cached.url);
 
-  return {
-    gcz:           buildTileUrl(gczMapId),
-    gez:           buildTileUrl(gezMapId),
-    hlzII:         buildTileUrl(hlzIIMapId),
-    hlzIII:        buildTileUrl(hlzIIIMapId),
-    hlzIIIPattern: buildTileUrl(hlzIIIPatternMapId),
-    soil:          soilUrl,
-  };
+  const pending = layerInFlight.get(key);
+  if (pending) return pending;
+
+  const promise = (async () => {
+    const t0 = Date.now();
+    const image = buildLayerImage(ee, layer, dataset, startYear, endYear);
+    const mapId = await getMapId(image);
+    const url = buildTileUrl(mapId);
+    layerCache.set(key, { url, expiresAt: Date.now() + TILE_CACHE_TTL_MS });
+    console.log(`getMapTiles built layer ${key} in ${Date.now() - t0} ms`);
+    return url;
+  })();
+  layerInFlight.set(key, promise);
+  promise.finally(() => layerInFlight.delete(key));
+  return promise;
+}
+
+async function computeTileBundle(ee, dataset, startYear, endYear) {
+  // Resolve every layer in parallel via the per-layer cache. Each layer
+  // resolves independently — but this bundle helper still waits for all of
+  // them. Prefer the per-layer endpoint (?layer=…) when latency matters.
+  const entries = await Promise.all(
+    ALL_LAYERS.map(async (layer) => [layer, await getLayerUrl(ee, layer, dataset, startYear, endYear)])
+  );
+  return Object.fromEntries(entries);
 }
 
 async function getMapTiles(req, res) {
@@ -616,30 +589,24 @@ async function getMapTiles(req, res) {
     endYear   = Math.min(Math.max(endYear,   minYear), maxYear);
     if (startYear > endYear) { const t = startYear; startYear = endYear; endYear = t; }
 
-    const cacheKey = `${dataset}:${startYear}:${endYear}`;
-    const now = Date.now();
-    const cached = tileCache.get(cacheKey);
-    if (cached && cached.expiresAt > now) {
-      res.set('X-Tile-Cache', 'hit');
-      return res.status(200).json(cached.value);
+    // Per-layer mode: ?layer=gez|gcz|hlzII|hlzIII|hlzIIIPattern|soil
+    // Returns just that one URL — the response resolves as soon as that single
+    // GEE getMapId call completes, instead of waiting for the slowest layer.
+    const requestedLayer = req.query && req.query.layer;
+    if (requestedLayer) {
+      if (!ALL_LAYERS.includes(requestedLayer)) {
+        return res.status(400).json({ error: `Unknown layer: ${requestedLayer}` });
+      }
+      const key = layerCacheKey(requestedLayer, dataset, startYear, endYear);
+      const cached = layerCache.get(key);
+      const wasCached = !!(cached && cached.expiresAt > Date.now());
+      const url = await getLayerUrl(ee, requestedLayer, dataset, startYear, endYear);
+      res.set('X-Tile-Cache', wasCached ? 'hit' : 'miss');
+      return res.status(200).json({ [requestedLayer]: url });
     }
 
-    // Coalesce concurrent requests for the same key onto a single GEE call.
-    let pending = inFlight.get(cacheKey);
-    if (!pending) {
-      pending = (async () => {
-        const t0 = Date.now();
-        const value = await computeTileBundle(ee, dataset, startYear, endYear);
-        tileCache.set(cacheKey, { value, expiresAt: Date.now() + TILE_CACHE_TTL_MS });
-        console.log(`getMapTiles built ${cacheKey} in ${Date.now() - t0} ms`);
-        return value;
-      })();
-      inFlight.set(cacheKey, pending);
-      pending.finally(() => inFlight.delete(cacheKey));
-    }
-
-    const value = await pending;
-    res.set('X-Tile-Cache', cached ? 'stale' : 'miss');
+    // Bundle mode (back-compat): returns all layers in one payload.
+    const value = await computeTileBundle(ee, dataset, startYear, endYear);
     return res.status(200).json(value);
   } catch (err) {
     console.error('Error in getMapTiles:', err);

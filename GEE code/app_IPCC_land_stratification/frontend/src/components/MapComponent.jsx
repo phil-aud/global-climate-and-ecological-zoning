@@ -170,29 +170,49 @@ function PatternTileLayer({ patternUrl, opacity, maxNativeZoom = 8 }) {
   useEffect(() => {
     if (!patternUrl) return;
 
+    // geeMaxZoom = the highest zoom at which GEE has real tiles for the
+    // pattern mask image (same as the zone layer's maxNativeZoom).
+    // The GridLayer itself has NO maxNativeZoom so Leaflet always calls
+    // createTile() at the actual map zoom — we generate fresh canvas tiles
+    // at every zoom level so the symbols stay the same physical screen size
+    // instead of being CSS-upscaled into giant blobs.
+    const geeMaxZoom = maxNativeZoom;
+
     const PatternLayer = L.GridLayer.extend({
       createTile(coords, done) {
         const tileSize = this.getTileSize();
         const canvas = document.createElement('canvas');
-        canvas.width  = tileSize.x;
-        canvas.height = tileSize.y;
-        // Match the zone tile crisp upscaling (no bilinear blur).
-        canvas.style.imageRendering = 'pixelated';
+        canvas.width  = tileSize.x;   // 256
+        canvas.height = tileSize.y;   // 256
+
+        // Clamp the GEE request to the data's native zoom.
+        // If the map is at zoom 10 but GEE only has data up to zoom 6,
+        // we request the zoom-6 parent tile and extract the sub-region that
+        // corresponds to this canvas tile.
+        const clampZ = Math.min(coords.z, geeMaxZoom);
+        const zDiff  = coords.z - clampZ;   // extra zoom levels beyond native
+        const scale  = 1 << zDiff;          // 2^zDiff  (1 when at/below native)
+        const clampX = coords.x >> zDiff;
+        const clampY = coords.y >> zDiff;
+
+        // Which sub-tile of the parent GEE tile we need (0-based)
+        const subTileX = coords.x & (scale - 1);
+        const subTileY = coords.y & (scale - 1);
 
         const url = patternUrl
-          .replace('{z}', coords.z)
-          .replace('{x}', coords.x)
-          .replace('{y}', coords.y);
+          .replace('{z}', clampZ)
+          .replace('{x}', clampX)
+          .replace('{y}', clampY);
 
         const img = new Image();
         img.crossOrigin = 'anonymous';
 
-        // Retry transient GEE tile failures (matches the zone-layer retry).
+        // Retry transient GEE tile failures.
         let attempts = 0;
         img.onerror = function () {
           attempts += 1;
           if (attempts > 4) {
-            done(null, canvas); // give up — leaves a transparent tile
+            done(null, canvas);
             return;
           }
           const sep = url.includes('?') ? '&' : '?';
@@ -200,77 +220,121 @@ function PatternTileLayer({ patternUrl, opacity, maxNativeZoom = 8 }) {
         };
 
         img.onload = function () {
-          const w = canvas.width;
-          const h = canvas.height;
+          const w = tileSize.x;
+          const h = tileSize.y;
+
+          // ── Step 1: read GEE mask pixels via an OFFSCREEN canvas ──────────
+          // We never draw onto the output `canvas` until we putImageData at
+          // the end, so there is zero risk of GEE tile colours leaking through.
+          const offscreen = document.createElement('canvas');
+          offscreen.width  = w;
+          offscreen.height = h;
+          const octx = offscreen.getContext('2d');
+          octx.imageSmoothingEnabled = false;
+          // Extract the correct sub-region of the GEE parent tile.
+          const srcSize = w / scale;
+          const srcLeft = subTileX * srcSize;
+          const srcTop  = subTileY * srcSize;
+          octx.drawImage(img, srcLeft, srcTop, srcSize, srcSize, 0, 0, w, h);
+
+          let imageData;
+          try {
+            imageData = octx.getImageData(0, 0, w, h);
+          } catch (_) {
+            done(null, canvas); // CORS-tainted — return transparent tile
+            return;
+          }
+          const { data } = imageData;
+
+          // ── Step 2: classify pixels and write pattern marks ───────────────
+          // Output starts all-transparent; only marks are written.
           const ctx = canvas.getContext('2d');
-          ctx.imageSmoothingEnabled = false;
-
-          // Draw the mask tile onto the canvas to read its pixels
-          ctx.drawImage(img, 0, 0, w, h);
-          const { data } = ctx.getImageData(0, 0, w, h);
-
-          // Build a transparent output image for the pattern overlay
-          ctx.clearRect(0, 0, w, h);
           const out = ctx.createImageData(w, h);
           const od  = out.data;
 
-          for (let i = 0; i < data.length; i += 4) {
-            const r  = data[i];
-            const g  = data[i + 1];
-            const b  = data[i + 2];
-            const px = (i / 4) % w;
-            const py = Math.floor(i / 4 / w);
+          // Server SLD encodes pattern category as a distinct pure RGB colour:
+          //   0 → #FFFFFF white   → no marks
+          //   1 → #FF0000 red     → right-diagonal hatch  (premontane)
+          //   2 → #00FF00 green   → left-diagonal hatch   (lower montane)
+          //   3 → #0000FF blue    → vertical lines        (montane)
+          //   4 → #FF00FF magenta → X cross-hatch         (subalpine)
+          //   5 → #FFA500 orange  → dots                  (alpine)
+          //   6 → #FFFF00 yellow  → stars / snowflake     (nival)
+          //
+          // GEE pyramid tiles use mean-aggregation so boundary pixels mix
+          // category colours. Use nearest-reference Euclidean distance
+          // classification instead of per-channel thresholds.
+          const REF = [
+            [255,   0,   0], // cat 1 — red
+            [  0, 255,   0], // cat 2 — green
+            [  0,   0, 255], // cat 3 — blue
+            [255,   0, 255], // cat 4 — magenta
+            [255, 165,   0], // cat 5 — orange
+            [255, 255,   0], // cat 6 — yellow
+          ];
 
-            // Tolerant colour tests to survive JPEG tile compression.
-            // Colour → symbol mapping (server SLD uses distinct pure colours):
-            //  Red   (#FF0000)   -> premontane -> right-diagonal hatch
-            //  Green (#00FF00)   -> lower montane -> left-diagonal hatch
-            //  Blue  (#0000FF)   -> montane -> vertical lines
-            //  Magenta (#FF00FF) -> subalpine -> X (both diagonals)
-            //  Orange (#FFA500)  -> alpine -> points
-            //  Yellow (#FFFF00)  -> nival -> stars
-            if (r > 180 && g < 120 && b < 120) {
-              // Right-diagonal hatch (45°)
-              if ((px - py + 1024) % 5 === 0) {
-                od[i] = 0; od[i+1] = 0; od[i+2] = 0; od[i+3] = 150;
-              }
-            } else if (g > 180 && r < 120 && b < 120) {
-              // Left-diagonal hatch (135°)
-              if ((px + py) % 5 === 0) {
-                od[i] = 0; od[i+1] = 0; od[i+2] = 0; od[i+3] = 150;
-              }
-            } else if (r > 180 && b > 180 && g < 120) {
-              // Magenta -> X pattern (both diagonals)
-              if ((px + py) % 5 === 0 || (px - py + 1024) % 5 === 0) {
-                od[i] = 0; od[i+1] = 0; od[i+2] = 0; od[i+3] = 140;
-              }
-            } else if (b > 180 && r < 120 && g < 120) {
-              // Blue -> vertical lines for montane
-              if (px % 4 === 0) {
-                od[i] = 0; od[i+1] = 0; od[i+2] = 0; od[i+3] = 140;
-              }
-            } else if (r > 200 && g > 120 && g < 210 && b < 120) {
-              // Points (orange #FFA500) — grid of dots every 6 px.
-              // Note: g<210 keeps pure yellow (255,255,0) out of this branch
-              // so nival pixels reach the star branch below.
-              if (px % 6 === 0 && py % 6 === 0) {
-                od[i] = 0; od[i+1] = 0; od[i+2] = 0; od[i+3] = 170;
-              }
-            } else if (r > 180 && g > 180 && b < 120) {
-              // Stars (yellow) — draw small star glyphs sparsely
-              if (px % 12 === 0 && py % 12 === 0) {
-                // small plus-shaped star
-                od[i] = 60; od[i+1] = 60; od[i+2] = 60; od[i+3] = 220;
-                const offs = [1, -1, 256, -256];
-                offs.forEach((off) => {
-                  const j = i + off * 4;
-                  if (j >= 0 && j < od.length) {
-                    od[j] = 60; od[j+1] = 60; od[j+2] = 60; od[j+3] = 220;
-                  }
-                });
-              }
+          // Mark opacities and widths tuned to match the legend CSS swatches.
+          // Legend uses repeating-linear-gradient: 1px solid / 4px gap at 28-38% opacity.
+          // On a 256-px canvas a 2-px mark every 5 px is clearly visible but not shady.
+          const HATCH_A  = 140; // 2-px lines every 5 px
+          const VERT_A   = 140;
+          const X_A      = 120; // X = both diagonals, keep slightly lighter
+          const DOT_A    = 180; // 2×2 dot grid — needs higher alpha to read as dots
+          const STAR_A   = 230;
+
+          function mark(idx, a) {
+            if (idx < 0 || idx + 3 >= od.length) return;
+            od[idx] = 0; od[idx + 1] = 0; od[idx + 2] = 0; od[idx + 3] = a;
+          }
+
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+            if (a < 16) continue; // transparent (ocean / no-data)
+
+            // Filter near-white / near-grey → category 0 (no marks).
+            const mx = Math.max(r, g, b);
+            const mn = Math.min(r, g, b);
+            if (mx < 80) continue;
+            if ((mx - mn) / (mx || 1) < 0.25) continue;
+
+            // Nearest reference colour (Euclidean distance in RGB)
+            let best = 0, bestD = Infinity;
+            for (let k = 0; k < REF.length; k++) {
+              const dr = r - REF[k][0], dg = g - REF[k][1], db = b - REF[k][2];
+              const d = dr * dr + dg * dg + db * db;
+              if (d < bestD) { bestD = d; best = k; }
             }
-            // White (#FFFFFF) or unknown → all zeros = transparent (already 0)
+            if (bestD > 180 * 180) continue; // too ambiguous, skip
+
+            const px = (i >> 2) % w;
+            const py = (i >> 2) / w | 0;
+
+            switch (best + 1) {
+              case 1: // right-diagonal hatch (/)  — matches legend 'right-hatch'
+                if ((px - py + 2048) % 10 < 2) mark(i, HATCH_A);
+                break;
+              case 2: // left-diagonal hatch (\)   — matches legend 'left-hatch'
+                if ((px + py) % 10 < 2) mark(i, HATCH_A);
+                break;
+              case 3: // vertical lines |||         — matches legend 'vertical'
+                if (px % 10 < 2) mark(i, VERT_A);
+                break;
+              case 4: // X cross-hatch              — matches legend 'x'
+                if ((px - py + 2048) % 10 < 2 || (px + py) % 10 < 2) mark(i, X_A);
+                break;
+              case 5: // dots                       — matches legend 'points'
+                if (px % 10 < 3 && py % 10 < 3) mark(i, DOT_A);
+                break;
+              case 6: // snowflake +                — matches legend 'snowflake'
+                if (px % 16 === 0 && py % 16 === 0) {
+                  for (let arm = -3; arm <= 3; arm++) {
+                    mark(i + arm * 4, STAR_A);          // horizontal arm
+                    mark(i + arm * w * 4, STAR_A);      // vertical arm
+                  }
+                }
+                break;
+              default: break;
+            }
           }
 
           ctx.putImageData(out, 0, 0);
@@ -286,7 +350,9 @@ function PatternTileLayer({ patternUrl, opacity, maxNativeZoom = 8 }) {
       tileSize: 256,
       opacity,
       pane: 'overlayPane',
-      maxNativeZoom,
+      // No maxNativeZoom here — the GridLayer must generate fresh canvas tiles
+      // at every zoom level so symbols keep a consistent screen size.
+      // The GEE URL is clamped to geeMaxZoom internally above.
       keepBuffer: 6,
     });
     layer.addTo(map);

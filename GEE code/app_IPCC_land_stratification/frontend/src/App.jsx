@@ -13,6 +13,7 @@ function App() {
   const [selectedCoords, setSelectedCoords] = useState(null);
   const [zoneData, setZoneData] = useState(null);
   const [climateData, setClimateData] = useState(null);
+  const [gczStats, setGczStats] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
@@ -56,6 +57,7 @@ function App() {
     setDataset(newDataset);
     setZoneData(null);
     setClimateData(null);
+    setGczStats(null);
   }, [dataset]);
 
   const handleMapClick = useCallback((lon, lat) => {
@@ -102,6 +104,31 @@ function App() {
       lines.push('TIER 1b: Temperature & Precipitation');
       lines.push(`  Mean annual temperature (MAT): ${meanAnnualTemp} °C`);
       lines.push(`  Mean annual precipitation (MAP): ${meanAnnualPrecip} mm`);
+    }
+
+    if (climateData?.monthly && climateData.monthly.length > 0) {
+      lines.push('');
+      lines.push('MONTHLY CLIMATE DATA');
+      lines.push('  Month     Temp (°C)  Precip (mm)');
+      climateData.monthly.forEach((d) => {
+        const m = String(d.month).padEnd(9);
+        const t = String(d.temperature ?? '—').padStart(9);
+        const p = String(d.precipitation ?? '—').padStart(11);
+        lines.push(`  ${m} ${t}  ${p}`);
+      });
+    }
+
+    if (gczStats?.rows && gczStats.rows.length > 0) {
+      lines.push('');
+      lines.push('MEAN ANNUAL TEMPERATURE PER GLOBAL CLIMATE ZONE (1995–2024)');
+      lines.push('  Zone                      Median (°C)  Min (°C)  Max (°C)');
+      gczStats.rows.forEach((r) => {
+        const zone = String(r.label || r.zone).padEnd(25);
+        const med  = String(r.median ?? '—').padStart(11);
+        const min  = String(r.min ?? '—').padStart(8);
+        const max  = String(r.max ?? '—').padStart(8);
+        lines.push(`  ${zone} ${med}  ${min}  ${max}`);
+      });
     }
 
     lines.push('');
@@ -237,7 +264,7 @@ function App() {
               <span className="year-range-toggle-caret">{yearRangeOpen ? '▾' : '▸'}</span>
               Select year range of GCZ, GEZ and HLZ
               <span className="year-range-current">
-                ({tileStartYear}–{tileEndYear}{(tileStartYear === DEFAULT_TILE_START && tileEndYear === DEFAULT_TILE_END) ? ' · default' : ''})
+                ({tileStartYear}–{tileEndYear}{(tileStartYear === DEFAULT_TILE_START && tileEndYear === DEFAULT_TILE_END) ? ' IPCC default' : ''})
               </span>
             </button>
             {yearRangeOpen && (
@@ -301,6 +328,8 @@ function App() {
             dataset={dataset}
           />
 
+          <hr className="tier-separator" />
+
           <ClimatePanel
             coords={selectedCoords}
             onClimateDataUpdate={setClimateData}
@@ -309,6 +338,7 @@ function App() {
             onLoadingChange={setLoading}
             onError={setError}
             dataset={dataset}
+            onGczStatsUpdate={setGczStats}
           />
         </div>
 

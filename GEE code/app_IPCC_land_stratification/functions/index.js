@@ -19,6 +19,7 @@ const { getMonthlyClimate } = require('./handlers/getMonthlyClimate');
 const { getAnnualSummary } = require('./handlers/getAnnualSummary');
 const { getBioecologicalData } = require('./handlers/getBioecologicalData');
 const { getMapTiles } = require('./handlers/getMapTiles');
+const { getGczTempStats } = require('./handlers/getGczTempStats');
 
 // Initialize Earth Engine on cold start
 let eeInitialized = false;
@@ -151,6 +152,25 @@ exports.getBioecologicalData = functions.https.onRequest((req, res) => {
     } catch (error) {
       console.error('Error in getBioecologicalData:', error);
       return res.status(500).json({ error: error.message || 'Internal server error', code: 'GET_BIOECOLOGICAL_DATA_ERROR' });
+    }
+  });
+});
+
+/**
+ * Cloud Function: Per-GCZ MAT statistics (median, min, max) for 1995–2024
+ * GET /getGczTempStats?dataset=cru|terraclimate
+ */
+exports.getGczTempStats = functions.https.onRequest((req, res) => {
+  corsMiddleware(req, res, async () => {
+    try {
+      if (req.method !== 'GET') return res.status(405).send('Method not allowed');
+      const dataset = (req.query && req.query.dataset) === 'terraclimate' ? 'terraclimate' : 'cru';
+      await ensureEEInitialized();
+      const result = await getGczTempStats(dataset);
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error('Error in getGczTempStats:', error);
+      return res.status(500).json({ error: error.message || 'Internal server error', code: 'GET_GCZ_TEMP_STATS_ERROR' });
     }
   });
 });

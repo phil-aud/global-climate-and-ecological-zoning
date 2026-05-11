@@ -83,15 +83,28 @@ export async function getBioecologicalData(lon, lat, startYear, endYear, dataset
  * Get GEE tile URL templates for all zone layers.
  * Returns { gcz, gez, hlzII, hlzIII } — each value is a Leaflet-compatible tile URL template.
  */
-export async function getMapTiles(dataset = 'cru', startYear, endYear) {
+export async function getMapTiles(dataset = 'cru') {
   try {
-    const params = { dataset };
-    if (Number.isFinite(startYear)) params.startYear = startYear;
-    if (Number.isFinite(endYear))   params.endYear   = endYear;
-    const response = await apiClient.get('/getMapTiles', { params });
+    const response = await apiClient.get('/getMapTiles', { params: { dataset } });
     return response.data;
   } catch (error) {
     throw new Error(error.response?.data?.error || 'Failed to get map tiles');
+  }
+}
+
+/**
+ * Get per-GCZ MAT statistics (median, min, max) for 1995–2024.
+ * Returns { dataset, period, rows: [{zone, label, median, min, max}, ...] }.
+ */
+export async function getGczTempStats(dataset = 'cru') {
+  try {
+    const response = await apiClient.get('/getGczTempStats', {
+      params: { dataset },
+      timeout: 120000,
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.error || 'Failed to get GCZ temperature statistics');
   }
 }
 

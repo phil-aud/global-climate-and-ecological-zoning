@@ -15,6 +15,7 @@ const { getMonthlyClimate } = require('./handlers/getMonthlyClimate');
 const { getAnnualSummary } = require('./handlers/getAnnualSummary');
 const { getBioecologicalData } = require('./handlers/getBioecologicalData');
 const { getMapTiles } = require('./handlers/getMapTiles');
+const { getGczTempStats } = require('./handlers/getGczTempStats');
 
 const app = express();
 app.use(cors({
@@ -104,20 +105,37 @@ app.get(`${BASE}/getMapTiles`, async (req, res) => {
   }
 });
 
+app.get(`${BASE}/getGczTempStats`, async (req, res) => {
+  try {
+    const dataset = (req.query && req.query.dataset) === 'terraclimate' ? 'terraclimate' : 'cru';
+    await ensureEEInitialized();
+    const result = await getGczTempStats(dataset);
+    res.json(result);
+  } catch (err) {
+    console.error('getGczTempStats error:', err);
+    res.status(500).json({ error: err.message || 'Internal server error' });
+  }
+});
+
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`Backend server running on http://localhost:${PORT}`);
   console.log(`API base: http://localhost:${PORT}${BASE}`);
 });
 
-// Prevent unhandled promise rejections from crashing the process
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled rejection at:', promise, 'reason:', reason);
-  // Intentionally do not rethrow — keep the server alive
+// Prevent unhandled errors from crashing the process
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason);
 });
 
-// Prevent uncaught exceptions (e.g. from GEE callback machinery) from crashing the process
 process.on('uncaughtException', (err) => {
   console.error('Uncaught exception:', err);
-  // Intentionally do not rethrow — keep the server alive
 });
+
+// Intercept process.exit to log the source
+const _exit = process.exit.bind(process);
+process.exit = function(code) {
+  console.error(`process.exit(${code}) called from:`);
+  console.error(new Error().stack);
+  _exit(code);
+};

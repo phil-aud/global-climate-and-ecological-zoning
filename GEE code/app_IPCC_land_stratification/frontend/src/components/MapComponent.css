@@ -13,6 +13,20 @@
   border-radius: 50%;
 }
 
+/* ── Crisp upscaling for GEE zone overlays ────────────────────────────────────
+ * Categorical raster tiles look terrible when the browser bilinear-blurs them
+ * past the asset's native resolution. Force nearest-neighbour upscaling on
+ * the GEE tile layers so they stay sharp at every zoom (matches how GEE's
+ * own Code Editor renders).
+ */
+.gee-zone-tile,
+.gee-zone-tile img,
+.leaflet-tile.gee-zone-tile {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+
 /* ── Wrapper ──────────────────────────────────────────────────────────────── */
 
 .map-wrapper {

@@ -1,0 +1,102 @@
+/////////////////////////////////////////////////////////////////////////////
+//////////////// Median / Min / Max Temperature per GCZ /////////////////////
+/////////////////////////////////////////////////////////////////////////////
+//
+// Standalone GEE script — TerraClimate (IDAHO_EPSCOR/TERRACLIMATE)
+// For each Global Climate Zone (GCZ, IPCC Vol4 Ch3 §3A.5.1) computes the
+// median, minimum and maximum mean annual temperature (MAT, °C) over
+// the reference period 1995–2024.
+//
+// IMPORTANT: this uses MEAN ANNUAL TEMPERATURE (not biotemperature).
+// Mean monthly T = (tmmn + tmmx) × 0.05 [°C]; MAT = mean of 12 monthly means.
+//
+// Inputs:
+//   • IDAHO_EPSCOR/TERRACLIMATE (monthly tmmn, tmmx, scale 0.1 °C)
+//   • Precomputed GCZ image (1995–2024, TerraClimate)
+//
+// Output: a printed table {zone, label, median, min, max} and a CSV export.
+/////////////////////////////////////////////////////////////////////////////
+
+// ── Configuration ───────────────────────────────────────────────────────────
+var START_YEAR = 1995;
+var END_YEAR   = 2024;
+
+var tc  = ee.ImageCollection('IDAHO_EPSCOR/TERRACLIMATE');
+var gcz = ee.Image('projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GlobalClimateZones_1995-2024_TerraClimate');
+
+// GCZ class labels (1..10)
+var GCZ_LABELS = {
+  1:  'Tropical Wet',
+  2:  'Tropical Moist',
+  3:  'Tropical Dry',
+  4:  'Warm Temperate Moist',
+  5:  'Warm Temperate Dry',
+  6:  'Cool Temperate Moist',
+  7:  'Cool Temperate Dry',
+  8:  'Boreal Moist',
+  9:  'Boreal Dry',
+  10: 'Polar'
+};
+
+// ── Build mean annual temperature image (1995–2024) ────────────────────────
+// monthly mean T = (tmmn + tmmx) × 0.05
+var monthlyMeanT = tc
+  .filter(ee.Filter.calendarRange(START_YEAR, END_YEAR, 'year'))
+  .map(function (img) {
+    return img.select('tmmn').add(img.select('tmmx'))
+      .multiply(0.05).rename('tmp')
+      .copyProperties(img, ['system:time_start']);
+  });
+
+// 12-month climatology, then mean → MAT
+var monthlyClim = ee.ImageCollection(
+  ee.List.sequence(1, 12).map(function (m) {
+    return monthlyMeanT
+      .filter(ee.Filter.calendarRange(m, m, 'month'))
+      .mean().rename('tmp');
+  })
+);
+
+var matImage = monthlyClim.mean().rename('mat');
+
+// ── Per-zone reduction ──────────────────────────────────────────────────────
+var stack = matImage.addBands(gcz.rename('zone'));
+
+var combined = ee.Reducer.percentile([50], ['p50'])
+  .combine({reducer2: ee.Reducer.minMax(), sharedInputs: true})
+  .group({groupField: 1, groupName: 'zone'});
+
+// Use TerraClimate native scale (~4638 m).
+var tcScale = tc.first().select('tmmn').projection().nominalScale();
+
+var stats = stack.reduceRegion({
+  reducer: combined,
+  geometry: ee.Geometry.Rectangle([-180, -60, 180, 85], null, false),
+  scale: tcScale,
+  maxPixels: 1e13,
+  bestEffort: true,
+  tileScale: 4
+});
+
+// ── Format as a FeatureCollection / table ──────────────────────────────────
+var groups = ee.List(stats.get('groups'));
+var rows = ee.FeatureCollection(groups.map(function (g) {
+  g = ee.Dictionary(g);
+  var zone = ee.Number(g.get('zone'));
+  return ee.Feature(null, {
+    zone:   zone,
+    label:  ee.Dictionary(GCZ_LABELS).get(zone.format('%d'), 'Unknown'),
+    median: ee.Number(g.get('p50')).multiply(100).round().divide(100),
+    min:    ee.Number(g.get('min')).multiply(100).round().divide(100),
+    max:    ee.Number(g.get('max')).multiply(100).round().divide(100)
+  });
+}));
+
+print('TerraClimate — Median / Min / Max MAT (°C) per GCZ, 1995–2024', rows);
+
+Export.table.toDrive({
+  collection: rows,
+  description: 'MedianTemperatureGCZ_TerraClimate_1995-2024',
+  fileFormat: 'CSV',
+  selectors: ['zone', 'label', 'median', 'min', 'max']
+});

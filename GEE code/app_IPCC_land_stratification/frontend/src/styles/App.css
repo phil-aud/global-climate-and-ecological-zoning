@@ -106,7 +106,7 @@ body {
 /* ── Section panels ─────────────────────────────────────── */
 .zone-panel,
 .climate-panel {
-  padding: 16px 16px 14px;
+  padding: 16px 16px 8px;
   background: var(--bg-card);
   border-bottom: 1px solid var(--border);
 }
@@ -267,6 +267,134 @@ body {
   background: #1a3a5c;
   border-color: #1a3a5c;
   color: #fff;
+}
+
+/* ── Year range selector for GCZ / GEZ / HLZ map tiles ──────────────────── */
+.year-range-selector {
+  margin: 8px 16px 6px;
+  border: 1px solid rgba(0, 33, 71, 0.2);
+  border-radius: 6px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.year-range-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: #1a3a5c;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.year-range-toggle:hover {
+  background: rgba(0, 33, 71, 0.05);
+}
+
+.year-range-toggle-caret {
+  display: inline-block;
+  width: 12px;
+  font-size: 11px;
+  color: #1a3a5c;
+}
+
+.year-range-current {
+  margin-left: auto;
+  font-weight: 400;
+  font-size: 0.78rem;
+  color: var(--text-mid);
+}
+
+.year-range-body {
+  padding: 10px 12px 12px;
+  border-top: 1px solid rgba(0, 33, 71, 0.12);
+  background: rgba(0, 33, 71, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.year-range-inputs {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.year-range-inputs label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #1a3a5c;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.year-range-inputs input {
+  width: 80px;
+  padding: 5px 8px;
+  border: 1px solid rgba(0, 33, 71, 0.25);
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  background: #fff;
+  color: #1a3a5c;
+}
+
+.year-range-inputs input:focus {
+  outline: none;
+  border-color: #1a3a5c;
+  box-shadow: 0 0 0 2px rgba(0, 33, 71, 0.15);
+}
+
+.year-range-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.year-range-btn {
+  padding: 5px 12px;
+  border: 1px solid rgba(0, 33, 71, 0.3);
+  border-radius: 5px;
+  background: #fff;
+  color: #1a3a5c;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.year-range-btn:hover {
+  background: rgba(0, 33, 71, 0.06);
+  border-color: #1a3a5c;
+}
+
+.year-range-btn--apply {
+  background: #1a3a5c;
+  border-color: #1a3a5c;
+  color: #fff;
+}
+
+.year-range-btn--apply:hover {
+  background: #002147;
+  border-color: #002147;
+  color: #fff;
+}
+
+.year-range-hint {
+  margin: 0;
+  font-size: 10px;
+  color: var(--text-mid);
+  line-height: 1.4;
 }
 
 .subtitle-banner {
@@ -530,6 +658,93 @@ body {
   opacity: 0.92;
 }
 
+/* ── Per-GCZ MAT statistics table ─────────────────────────────────── */
+.tier-separator {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 10px 0;
+  opacity: 1;
+}
+
+.gcz-stats {
+  margin-top: 10px;
+  padding: 10px 8px;
+  background: var(--bg-card);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.climate-point-card {
+  margin-top: 10px;
+  padding: 10px 8px;
+  background: var(--bg-card);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.gcz-stats-title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-mid);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.gcz-stats-period {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-light);
+}
+
+.gcz-stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.gcz-stats-table th,
+.gcz-stats-table td {
+  padding: 4px 8px;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-mid);
+}
+
+.gcz-stats-table th:first-child,
+.gcz-stats-table td:first-child {
+  text-align: left;
+  white-space: nowrap;
+}
+
+.gcz-color-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  border: 1px solid rgba(0,0,0,0.15);
+  margin-right: 6px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.gcz-stats-table thead th {
+  background: rgba(45, 55, 72, 0.06);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+}
+
+.gcz-stats-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
 /* ── Per-section source notes ──────────────────────────────────────── */
 .panel-sources {
   margin-top: 12px;
@@ -738,6 +953,41 @@ body {
   background: rgba(0,0,0,0.08);
 }
 
+/* ── Maximised (modal) variants ─────────────────────────── */
+/* Larger fonts for the GCZ stats table when shown in a modal — must fit
+   without scrolling on a typical viewport. */
+.hlz-modal-content .gcz-stats-title {
+  font-size: 15px;
+  margin-bottom: 12px;
+}
+.hlz-modal-content .gcz-stats-table {
+  font-size: 16px;
+}
+.hlz-modal-content .gcz-stats-table th,
+.hlz-modal-content .gcz-stats-table td {
+  padding: 10px 18px;
+}
+.hlz-modal-content .gcz-stats-table thead th {
+  font-size: 13px;
+}
+
+/* Wider modal + tall, fully visible chart when the monthly climate chart is
+   maximised. The chart uses maintainAspectRatio:false, so it fills this box. */
+.hlz-modal-content--chart {
+  width: min(1200px, 95vw);
+  padding: 36px 20px 20px;
+}
+.hlz-modal-content--chart .chart-container {
+  height: min(75vh, 720px);
+  width: 100%;
+  margin: 0;
+}
+
+/* Spacing between the MAT/MAP summary block and the monthly climate chart */
+.monthly-chart-section {
+  margin-top: 14px;
+}
+
 /* ── Responsive ─────────────────────────────────────────── */
 @media (max-width: 768px) {
   .app-container { flex-direction: column; }
@@ -745,126 +995,3 @@ body {
   .panel-container { width: 100%; min-width: unset; height: 60%; }
 }
 
-
-/* -- Year range selector for GCZ / GEZ / HLZ map tiles --- */
-.year-range-selector {
-  padding: 6px 16px 0;
-}
-
-.year-range-toggle {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  border: 1px dashed rgba(0,33,71,0.25);
-  border-radius: 6px;
-  background: #fff;
-  color: #1a3a5c;
-  font-family: inherit;
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.year-range-toggle:hover {
-  border-color: #1a3a5c;
-  background: rgba(0,33,71,0.04);
-}
-
-.year-range-toggle-caret {
-  display: inline-block;
-  width: 10px;
-  font-weight: 700;
-}
-
-.year-range-current {
-  margin-left: auto;
-  font-weight: 500;
-  color: var(--text-mid);
-  font-size: 0.78rem;
-}
-
-.year-range-body {
-  margin-top: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
-}
-
-.year-range-inputs {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.year-range-inputs label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-mid);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.year-range-inputs input {
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 12px;
-  font-family: inherit;
-  width: 100px;
-  background: #fff;
-  color: var(--text-dark);
-}
-
-.year-range-inputs input:focus {
-  outline: none;
-  border-color: var(--navy-light);
-}
-
-.year-range-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.year-range-btn {
-  padding: 6px 12px;
-  border: 1px solid rgba(0,33,71,0.25);
-  border-radius: 6px;
-  background: #fff;
-  color: #1a3a5c;
-  font-family: inherit;
-  font-size: 0.78rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-}
-
-.year-range-btn:hover {
-  border-color: #1a3a5c;
-  background: rgba(0,33,71,0.06);
-}
-
-.year-range-btn--apply {
-  background: var(--navy-light);
-  border-color: var(--navy-light);
-  color: #fff;
-}
-
-.year-range-btn--apply:hover {
-  background: var(--navy);
-  border-color: var(--navy);
-}
-
-.year-range-hint {
-  margin: 8px 0 0 0;
-  font-size: 11px;
-  color: var(--text-mid);
-}

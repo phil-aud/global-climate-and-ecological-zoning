@@ -465,6 +465,119 @@ function buildTileUrl(mapId) {
 
 // ── Handler ──────────────────────────────────────────────────────────────────
 
+// In-memory cache for tile URL bundles. Keyed by `${dataset}:${startYear}:${endYear}`.
+// EE map tile tokens stay valid for hours; we expire entries after 60 min so a
+// long-running server eventually refreshes them. Concurrent requests for the
+// same key share a single in-flight Promise to avoid duplicate GEE work.
+const TILE_CACHE_TTL_MS = 60 * 60 * 1000; // 60 minutes
+const tileCache = new Map();      // key -> { value, expiresAt }
+const inFlight  = new Map();      // key -> Promise
+
+// Soil layer is invariant across years/datasets; cache it independently.
+let soilTileCache = null;         // { url, expiresAt }
+let soilInFlight  = null;         // Promise
+
+async function buildSoilTileUrl(ee) {
+  const now = Date.now();
+  if (soilTileCache && soilTileCache.expiresAt > now) return soilTileCache.url;
+  if (soilInFlight) return soilInFlight;
+  soilInFlight = (async () => {
+    const soilImage = ee.Image(ASSETS.soil)
+      .remap([1,2,3,4,5,6,7,8,9,10,11,12,13],[7,1,2,8,7,4,8,3,8,5,6,8,8]);
+    const mapId = await getMapId(soilImage.sldStyle(SLD_SOIL));
+    const url = buildTileUrl(mapId);
+    soilTileCache = { url, expiresAt: Date.now() + TILE_CACHE_TTL_MS };
+    return url;
+  })();
+  try {
+    return await soilInFlight;
+  } finally {
+    soilInFlight = null;
+  }
+}
+
+async function computeTileBundle(ee, dataset, startYear, endYear) {
+  // Fast path: when the requested CRU range exactly matches the published asset
+  // period, serve straight from the precomputed assets — much faster than
+  // recomputing the HLZ classification on-the-fly in GEE.
+  if (dataset === 'cru' && startYear === CRU_TILE_START && endYear === CRU_TILE_END) {
+    const gczAsset   = ee.Image(ASSETS.gcz);
+    const gezAsset   = ee.Image(ASSETS.gez);
+    const hlzIIAsset = ee.Image(ASSETS.hlzII);
+    const hlzIIIAsset = ee.Image(ASSETS.hlzIII);
+    const hlzIIIPatternImage = hlzIIIAsset.remap(HLZIII_FROM_VALUES, HLZIII_TO_PATTERNS, 0);
+
+    const [gczMapId, gezMapId, hlzIIMapId, hlzIIIMapId, hlzIIIPatternMapId, soilUrl] = await Promise.all([
+      getMapId(gczAsset.sldStyle(SLD_GCZ)),
+      getMapId(gezAsset.sldStyle(SLD_GEZ)),
+      getMapId(hlzIIAsset.sldStyle(SLD_HLZII)),
+      getMapId(hlzIIIAsset.sldStyle(SLD_HLZIII)),
+      getMapId(hlzIIIPatternImage.sldStyle(SLD_HLZIII_PATTERN)),
+      buildSoilTileUrl(ee),
+    ]);
+
+    return {
+      gcz:           buildTileUrl(gczMapId),
+      gez:           buildTileUrl(gezMapId),
+      hlzII:         buildTileUrl(hlzIIMapId),
+      hlzIII:        buildTileUrl(hlzIIIMapId),
+      hlzIIIPattern: buildTileUrl(hlzIIIPatternMapId),
+      soil:          soilUrl,
+    };
+  }
+
+  if (dataset === 'terraclimate') {
+    const hlzImage = computeHLZ(startYear, endYear);
+    const gczImage   = hlzImage.remap(HLZ_FROM, GCZ_TO,  0);
+    const gezImage   = hlzImage.remap(HLZ_FROM, GEZ_TO,  0);
+    const hlzIIImage = hlzImage.remap(HLZ_FROM, HLZII_TO, 0);
+    const hlzIIIPatternImage = hlzImage.remap(HLZIII_FROM_VALUES, HLZIII_TO_PATTERNS, 0);
+
+    const [gczMapId, gezMapId, hlzIIMapId, hlzIIIMapId, hlzIIIPatternMapId, soilUrl] = await Promise.all([
+      getMapId(gczImage.sldStyle(SLD_GCZ)),
+      getMapId(gezImage.sldStyle(SLD_GEZ)),
+      getMapId(hlzIIImage.sldStyle(SLD_HLZII)),
+      getMapId(hlzImage.sldStyle(SLD_HLZIII)),
+      getMapId(hlzIIIPatternImage.sldStyle(SLD_HLZIII_PATTERN)),
+      buildSoilTileUrl(ee),
+    ]);
+
+    return {
+      gcz:           buildTileUrl(gczMapId),
+      gez:           buildTileUrl(gezMapId),
+      hlzII:         buildTileUrl(hlzIIMapId),
+      hlzIII:        buildTileUrl(hlzIIIMapId),
+      hlzIIIPattern: buildTileUrl(hlzIIIPatternMapId),
+      soil:          soilUrl,
+    };
+  }
+
+  // CRU non-default range: compute on-the-fly using the inspector formula.
+  const hlzImageCRU = computeHLZ_CRU(startYear, endYear);
+  const gczImageCRU   = hlzImageCRU.remap(HLZ_FROM, GCZ_TO,  0);
+  const gezImageCRU   = hlzImageCRU.remap(HLZ_FROM, GEZ_TO,  0);
+  const hlzIIImageCRU = hlzImageCRU.remap(HLZ_FROM, HLZII_TO, 0);
+  const hlzIIIPatternImage = hlzImageCRU.remap(HLZIII_FROM_VALUES, HLZIII_TO_PATTERNS, 0);
+
+  const [gczMapId, gezMapId, hlzIIMapId, hlzIIIMapId, hlzIIIPatternMapId, soilUrl] = await Promise.all([
+    getMapId(gczImageCRU.sldStyle(SLD_GCZ)),
+    getMapId(gezImageCRU.sldStyle(SLD_GEZ)),
+    getMapId(hlzIIImageCRU.sldStyle(SLD_HLZII)),
+    getMapId(hlzImageCRU.sldStyle(SLD_HLZIII)),
+    getMapId(hlzIIIPatternImage.sldStyle(SLD_HLZIII_PATTERN)),
+    buildSoilTileUrl(ee),
+  ]);
+
+  return {
+    gcz:           buildTileUrl(gczMapId),
+    gez:           buildTileUrl(gezMapId),
+    hlzII:         buildTileUrl(hlzIIMapId),
+    hlzIII:        buildTileUrl(hlzIIIMapId),
+    hlzIIIPattern: buildTileUrl(hlzIIIPatternMapId),
+    soil:          soilUrl,
+  };
+}
+
 async function getMapTiles(req, res) {
   try {
     const ee = getEarthEngine();
@@ -485,77 +598,31 @@ async function getMapTiles(req, res) {
     endYear   = Math.min(Math.max(endYear,   minYear), maxYear);
     if (startYear > endYear) { const t = startYear; startYear = endYear; endYear = t; }
 
-    if (dataset === 'terraclimate') {
-      // ── TerraClimate: compute all zone images on-the-fly ────────────────────
-      const hlzImage = computeHLZ(startYear, endYear);
-
-      const gczImage   = hlzImage.remap(HLZ_FROM, GCZ_TO,  0);
-      const gezImage   = hlzImage.remap(HLZ_FROM, GEZ_TO,  0);
-      const hlzIIImage = hlzImage.remap(HLZ_FROM, HLZII_TO, 0);
-      const hlzIIIPatternImage = hlzImage.remap(HLZIII_FROM_VALUES, HLZIII_TO_PATTERNS, 0);
-
-      const soilImage = ee.Image(ASSETS.soil)
-        .remap([1,2,3,4,5,6,7,8,9,10,11,12,13],[7,1,2,8,7,4,8,3,8,5,6,8,8]);
-
-      const [gczMapId, gezMapId, hlzIIMapId, hlzIIIMapId, hlzIIIPatternMapId, soilMapId] = await Promise.all([
-        getMapId(gczImage.sldStyle(SLD_GCZ)),
-        getMapId(gezImage.sldStyle(SLD_GEZ)),
-        getMapId(hlzIIImage.sldStyle(SLD_HLZII)),
-        getMapId(hlzImage.sldStyle(SLD_HLZIII)),
-        getMapId(hlzIIIPatternImage.sldStyle(SLD_HLZIII_PATTERN)),
-        getMapId(soilImage.sldStyle(SLD_SOIL)),
-      ]);
-
-      return res.status(200).json({
-        gcz:           buildTileUrl(gczMapId),
-        gez:           buildTileUrl(gezMapId),
-        hlzII:         buildTileUrl(hlzIIMapId),
-        hlzIII:        buildTileUrl(hlzIIIMapId),
-        hlzIIIPattern: buildTileUrl(hlzIIIPatternMapId),
-        soil:          buildTileUrl(soilMapId),
-      });
+    const cacheKey = `${dataset}:${startYear}:${endYear}`;
+    const now = Date.now();
+    const cached = tileCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      res.set('X-Tile-Cache', 'hit');
+      return res.status(200).json(cached.value);
     }
 
-    // ── CRU (default): compute on-the-fly using same formula as inspector ────
-    // Using computeHLZ_CRU ensures the map tiles use the exact same lapse-rate
-    // formula (constant 6 °C/km) and data as getBioecologicalData.js.
-    const hlzImageCRU = computeHLZ_CRU(startYear, endYear);
-
-    const gczImageCRU   = hlzImageCRU.remap(HLZ_FROM, GCZ_TO,  0);
-    const gezImageCRU   = hlzImageCRU.remap(HLZ_FROM, GEZ_TO,  0);
-    const hlzIIImageCRU = hlzImageCRU.remap(HLZ_FROM, HLZII_TO, 0);
-    const hlzIIIPatternImage = hlzImageCRU.remap(HLZIII_FROM_VALUES, HLZIII_TO_PATTERNS, 0);
-
-    const [gczMapId, gezMapId, hlzIIMapId, hlzIIIMapId, hlzIIIPatternMapId, soilMapId] = await Promise.all([
-      getMapId(gczImageCRU.sldStyle(SLD_GCZ)),
-      getMapId(gezImageCRU.sldStyle(SLD_GEZ)),
-      getMapId(hlzIIImageCRU.sldStyle(SLD_HLZII)),
-      getMapId(hlzImageCRU.sldStyle(SLD_HLZIII)),
-      getMapId(hlzIIIPatternImage.sldStyle(SLD_HLZIII_PATTERN)),
-      // Soil: remap original codes to 1..8 classes to match frontend palette
-      getMapId(ee.Image(ASSETS.soil).remap([1,2,3,4,5,6,7,8,9,10,11,12,13],[7,1,2,8,7,4,8,3,8,5,6,8,8]).sldStyle(SLD_SOIL)),
-    ]);
-
-    try {
-      console.log('getMapTiles mapIds:', {
-        gcz: { mapid: gczMapId.mapid, token: gczMapId.token, urlFormat: gczMapId.urlFormat },
-        gez: { mapid: gezMapId.mapid, token: gezMapId.token, urlFormat: gezMapId.urlFormat },
-        hlzII: { mapid: hlzIIMapId.mapid, token: hlzIIMapId.token, urlFormat: hlzIIMapId.urlFormat },
-        hlzIII: { mapid: hlzIIIMapId.mapid, token: hlzIIIMapId.token, urlFormat: hlzIIIMapId.urlFormat },
-        hlzIIIPattern: { mapid: hlzIIIPatternMapId.mapid, token: hlzIIIPatternMapId.token, urlFormat: hlzIIIPatternMapId.urlFormat },
-      });
-    } catch (e) {
-      console.log('Could not stringify mapId objects for debugging:', e.message);
+    // Coalesce concurrent requests for the same key onto a single GEE call.
+    let pending = inFlight.get(cacheKey);
+    if (!pending) {
+      pending = (async () => {
+        const t0 = Date.now();
+        const value = await computeTileBundle(ee, dataset, startYear, endYear);
+        tileCache.set(cacheKey, { value, expiresAt: Date.now() + TILE_CACHE_TTL_MS });
+        console.log(`getMapTiles built ${cacheKey} in ${Date.now() - t0} ms`);
+        return value;
+      })();
+      inFlight.set(cacheKey, pending);
+      pending.finally(() => inFlight.delete(cacheKey));
     }
 
-    return res.status(200).json({
-      gcz:           buildTileUrl(gczMapId),
-      gez:           buildTileUrl(gezMapId),
-      hlzII:         buildTileUrl(hlzIIMapId),
-      hlzIII:        buildTileUrl(hlzIIIMapId),
-      hlzIIIPattern: buildTileUrl(hlzIIIPatternMapId),
-      soil:          buildTileUrl(soilMapId),
-    });
+    const value = await pending;
+    res.set('X-Tile-Cache', cached ? 'stale' : 'miss');
+    return res.status(200).json(value);
   } catch (err) {
     console.error('Error in getMapTiles:', err);
     return res.status(500).json({ error: err.message || 'Failed to generate map tiles' });

@@ -436,7 +436,8 @@ function MapComponent({ onMapClick, selectedCoords, zoneData, panelVisible, onPa
       }
     }
     setTilesLoading(true);
-    setTileUrls(null);
+    // Keep previous tileUrls visible while the new bundle is being fetched —
+    // the GEE recompute can take several seconds and a blank map looks broken.
     fetchWithRetry(5, 2000);
     return () => { cancelled = true; };
   }, [dataset, startYear, endYear]);

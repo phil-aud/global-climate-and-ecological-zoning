@@ -406,7 +406,7 @@ function OpacitySlider({ value, onChange }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-function MapComponent({ onMapClick, selectedCoords, zoneData, panelVisible, onPanelToggle, dataset }) {
+function MapComponent({ onMapClick, selectedCoords, zoneData, panelVisible, onPanelToggle, dataset, startYear, endYear }) {
   const [tileUrls, setTileUrls] = useState(null);
   const [tilesLoading, setTilesLoading] = useState(true);
   const [tilesError, setTilesError] = useState(null);
@@ -419,7 +419,7 @@ function MapComponent({ onMapClick, selectedCoords, zoneData, panelVisible, onPa
     let cancelled = false;
     async function fetchWithRetry(attemptsLeft, delay) {
       try {
-        const urls = await getMapTiles(dataset);
+        const urls = await getMapTiles(dataset, startYear, endYear);
         if (!cancelled) {
           setTileUrls(urls);
           setTilesError(null);
@@ -439,7 +439,7 @@ function MapComponent({ onMapClick, selectedCoords, zoneData, panelVisible, onPa
     setTileUrls(null);
     fetchWithRetry(5, 2000);
     return () => { cancelled = true; };
-  }, [dataset]);
+  }, [dataset, startYear, endYear]);
 
   // Determine the highlighted zone value for the active layer
   const highlightValue = (() => {

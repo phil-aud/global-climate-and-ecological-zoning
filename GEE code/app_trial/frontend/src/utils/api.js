@@ -83,9 +83,12 @@ export async function getBioecologicalData(lon, lat, startYear, endYear, dataset
  * Get GEE tile URL templates for all zone layers.
  * Returns { gcz, gez, hlzII, hlzIII } — each value is a Leaflet-compatible tile URL template.
  */
-export async function getMapTiles(dataset = 'cru') {
+export async function getMapTiles(dataset = 'cru', startYear, endYear) {
   try {
-    const response = await apiClient.get('/getMapTiles', { params: { dataset } });
+    const params = { dataset };
+    if (Number.isFinite(startYear)) params.startYear = startYear;
+    if (Number.isFinite(endYear))   params.endYear   = endYear;
+    const response = await apiClient.get('/getMapTiles', { params });
     return response.data;
   } catch (error) {
     throw new Error(error.response?.data?.error || 'Failed to get map tiles');

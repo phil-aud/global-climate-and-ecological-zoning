@@ -745,3 +745,126 @@ body {
   .panel-container { width: 100%; min-width: unset; height: 60%; }
 }
 
+
+/* -- Year range selector for GCZ / GEZ / HLZ map tiles --- */
+.year-range-selector {
+  padding: 6px 16px 0;
+}
+
+.year-range-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px dashed rgba(0,33,71,0.25);
+  border-radius: 6px;
+  background: #fff;
+  color: #1a3a5c;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.year-range-toggle:hover {
+  border-color: #1a3a5c;
+  background: rgba(0,33,71,0.04);
+}
+
+.year-range-toggle-caret {
+  display: inline-block;
+  width: 10px;
+  font-weight: 700;
+}
+
+.year-range-current {
+  margin-left: auto;
+  font-weight: 500;
+  color: var(--text-mid);
+  font-size: 0.78rem;
+}
+
+.year-range-body {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.year-range-inputs {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.year-range-inputs label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-mid);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.year-range-inputs input {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  width: 100px;
+  background: #fff;
+  color: var(--text-dark);
+}
+
+.year-range-inputs input:focus {
+  outline: none;
+  border-color: var(--navy-light);
+}
+
+.year-range-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.year-range-btn {
+  padding: 6px 12px;
+  border: 1px solid rgba(0,33,71,0.25);
+  border-radius: 6px;
+  background: #fff;
+  color: #1a3a5c;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.year-range-btn:hover {
+  border-color: #1a3a5c;
+  background: rgba(0,33,71,0.06);
+}
+
+.year-range-btn--apply {
+  background: var(--navy-light);
+  border-color: var(--navy-light);
+  color: #fff;
+}
+
+.year-range-btn--apply:hover {
+  background: var(--navy);
+  border-color: var(--navy);
+}
+
+.year-range-hint {
+  margin: 8px 0 0 0;
+  font-size: 11px;
+  color: var(--text-mid);
+}

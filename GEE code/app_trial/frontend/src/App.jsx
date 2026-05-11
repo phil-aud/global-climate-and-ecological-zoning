@@ -18,6 +18,39 @@ function App() {
   const [copied, setCopied] = useState(false);
   const [dataset, setDataset] = useState('cru');
 
+  // Year range applied to the GCZ / GEZ / HLZ map tiles. Default 1995-2024.
+  const DEFAULT_TILE_START = 1995;
+  const DEFAULT_TILE_END = 2024;
+  const [tileStartYear, setTileStartYear] = useState(DEFAULT_TILE_START);
+  const [tileEndYear, setTileEndYear] = useState(DEFAULT_TILE_END);
+  const [yearRangeOpen, setYearRangeOpen] = useState(false);
+  const [pendingStartYear, setPendingStartYear] = useState(String(DEFAULT_TILE_START));
+  const [pendingEndYear, setPendingEndYear] = useState(String(DEFAULT_TILE_END));
+
+  const tileMinYear = dataset === 'terraclimate' ? 1958 : 1901;
+  const tileMaxYear = 2024;
+
+  const handleApplyYearRange = useCallback(() => {
+    let s = parseInt(pendingStartYear, 10);
+    let e = parseInt(pendingEndYear, 10);
+    if (!Number.isFinite(s)) s = DEFAULT_TILE_START;
+    if (!Number.isFinite(e)) e = DEFAULT_TILE_END;
+    s = Math.min(Math.max(s, tileMinYear), tileMaxYear);
+    e = Math.min(Math.max(e, tileMinYear), tileMaxYear);
+    if (s > e) { const t = s; s = e; e = t; }
+    setPendingStartYear(String(s));
+    setPendingEndYear(String(e));
+    setTileStartYear(s);
+    setTileEndYear(e);
+  }, [pendingStartYear, pendingEndYear, tileMinYear, tileMaxYear]);
+
+  const handleResetYearRange = useCallback(() => {
+    setPendingStartYear(String(DEFAULT_TILE_START));
+    setPendingEndYear(String(DEFAULT_TILE_END));
+    setTileStartYear(DEFAULT_TILE_START);
+    setTileEndYear(DEFAULT_TILE_END);
+  }, []);
+
   const handleDatasetChange = useCallback((newDataset) => {
     if (newDataset === dataset) return;
     setDataset(newDataset);
@@ -122,6 +155,8 @@ function App() {
           panelVisible={panelVisible}
           onPanelToggle={() => setPanelVisible(v => !v)}
           dataset={dataset}
+          startYear={tileStartYear}
+          endYear={tileEndYear}
         />
       </div>
       
@@ -189,6 +224,69 @@ function App() {
             >
               TerraClimate (5 km)
             </button>
+          </div>
+
+          {/* Year range selector for GCZ / GEZ / HLZ map tiles */}
+          <div className="year-range-selector">
+            <button
+              type="button"
+              className="year-range-toggle"
+              onClick={() => setYearRangeOpen(o => !o)}
+              aria-expanded={yearRangeOpen}
+            >
+              <span className="year-range-toggle-caret">{yearRangeOpen ? '▾' : '▸'}</span>
+              Select year range of GCZ, GEZ and HLZ
+              <span className="year-range-current">
+                ({tileStartYear}–{tileEndYear}{(tileStartYear === DEFAULT_TILE_START && tileEndYear === DEFAULT_TILE_END) ? ' · default' : ''})
+              </span>
+            </button>
+            {yearRangeOpen && (
+              <div className="year-range-body">
+                <div className="year-range-inputs">
+                  <label>
+                    Start
+                    <input
+                      type="number"
+                      min={tileMinYear}
+                      max={tileMaxYear}
+                      step="1"
+                      value={pendingStartYear}
+                      onChange={(e) => setPendingStartYear(e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    End
+                    <input
+                      type="number"
+                      min={tileMinYear}
+                      max={tileMaxYear}
+                      step="1"
+                      value={pendingEndYear}
+                      onChange={(e) => setPendingEndYear(e.target.value)}
+                    />
+                  </label>
+                </div>
+                <div className="year-range-actions">
+                  <button
+                    type="button"
+                    className="year-range-btn year-range-btn--apply"
+                    onClick={handleApplyYearRange}
+                  >
+                    Apply
+                  </button>
+                  <button
+                    type="button"
+                    className="year-range-btn"
+                    onClick={handleResetYearRange}
+                  >
+                    Reset to {DEFAULT_TILE_START}–{DEFAULT_TILE_END}
+                  </button>
+                </div>
+                <p className="year-range-hint">
+                  Allowed: {tileMinYear}–{tileMaxYear} · Recomputes the GCZ, GEZ, HLZ II and HLZ III map tiles for the selected period.
+                </p>
+              </div>
+            )}
           </div>
 
           <ZonePanel

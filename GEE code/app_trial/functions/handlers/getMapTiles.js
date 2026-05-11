@@ -470,9 +470,24 @@ async function getMapTiles(req, res) {
     const ee = getEarthEngine();
     const dataset = (req.query && req.query.dataset) === 'terraclimate' ? 'terraclimate' : 'cru';
 
+    // Parse optional year range from query params; fall back to dataset defaults.
+    const defaultStart = dataset === 'terraclimate' ? TC_TILE_START : CRU_TILE_START;
+    const defaultEnd   = dataset === 'terraclimate' ? TC_TILE_END   : CRU_TILE_END;
+    const minYear      = dataset === 'terraclimate' ? 1958 : 1901;
+    const maxYear      = 2024;
+
+    let startYear = parseInt(req.query && req.query.startYear, 10);
+    let endYear   = parseInt(req.query && req.query.endYear, 10);
+    if (!Number.isFinite(startYear)) startYear = defaultStart;
+    if (!Number.isFinite(endYear))   endYear   = defaultEnd;
+    // Clamp + ensure start <= end
+    startYear = Math.min(Math.max(startYear, minYear), maxYear);
+    endYear   = Math.min(Math.max(endYear,   minYear), maxYear);
+    if (startYear > endYear) { const t = startYear; startYear = endYear; endYear = t; }
+
     if (dataset === 'terraclimate') {
       // ── TerraClimate: compute all zone images on-the-fly ────────────────────
-      const hlzImage = computeHLZ(TC_TILE_START, TC_TILE_END);
+      const hlzImage = computeHLZ(startYear, endYear);
 
       const gczImage   = hlzImage.remap(HLZ_FROM, GCZ_TO,  0);
       const gezImage   = hlzImage.remap(HLZ_FROM, GEZ_TO,  0);
@@ -504,7 +519,7 @@ async function getMapTiles(req, res) {
     // ── CRU (default): compute on-the-fly using same formula as inspector ────
     // Using computeHLZ_CRU ensures the map tiles use the exact same lapse-rate
     // formula (constant 6 °C/km) and data as getBioecologicalData.js.
-    const hlzImageCRU = computeHLZ_CRU(CRU_TILE_START, CRU_TILE_END);
+    const hlzImageCRU = computeHLZ_CRU(startYear, endYear);
 
     const gczImageCRU   = hlzImageCRU.remap(HLZ_FROM, GCZ_TO,  0);
     const gezImageCRU   = hlzImageCRU.remap(HLZ_FROM, GEZ_TO,  0);

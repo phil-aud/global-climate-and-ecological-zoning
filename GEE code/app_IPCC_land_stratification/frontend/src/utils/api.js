@@ -13,14 +13,25 @@ const apiClient = axios.create({
   timeout: 30000, // 30 seconds
 });
 
+/** Throw a friendly Error when the backend returned a {noData:true} payload. */
+function throwIfNoData(data, fallback) {
+  if (data && data.noData) {
+    const err = new Error(data.message || fallback || 'No data available at this location');
+    err.noData = true;
+    throw err;
+  }
+  return data;
+}
+
 /**
  * Query zone classifications at a point
  */
 export async function queryZones(lon, lat, dataset = 'cru') {
   try {
     const response = await apiClient.post('/queryZones', { lon, lat, dataset });
-    return response.data;
+    return throwIfNoData(response.data, 'No zone classification available at this location');
   } catch (error) {
+    if (error.noData) throw error;
     throw new Error(error.response?.data?.error || 'Failed to query zones');
   }
 }
@@ -37,8 +48,9 @@ export async function getMonthlyClimate(lon, lat, startYear, endYear, dataset = 
       endYear,
       dataset,
     });
-    return response.data;
+    return throwIfNoData(response.data, 'No monthly climate data available at this location');
   } catch (error) {
+    if (error.noData) throw error;
     throw new Error(error.response?.data?.error || 'Failed to get monthly climate data');
   }
 }
@@ -55,8 +67,9 @@ export async function getAnnualSummary(lon, lat, startYear, endYear, dataset = '
       endYear,
       dataset,
     });
-    return response.data;
+    return throwIfNoData(response.data, 'No annual summary available at this location');
   } catch (error) {
+    if (error.noData) throw error;
     throw new Error(error.response?.data?.error || 'Failed to get annual summary');
   }
 }
@@ -73,8 +86,9 @@ export async function getBioecologicalData(lon, lat, startYear, endYear, dataset
       endYear,
       dataset,
     });
-    return response.data;
+    return throwIfNoData(response.data, 'No bioecological data available at this location');
   } catch (error) {
+    if (error.noData) throw error;
     throw new Error(error.response?.data?.error || 'Failed to get bioecological data');
   }
 }

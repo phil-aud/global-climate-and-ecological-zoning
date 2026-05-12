@@ -7,9 +7,12 @@ import MapComponent from './components/MapComponent';
 import ZonePanel from './components/ZonePanel';
 import SoilsPanel from './components/SoilsPanel';
 import ClimatePanel from './components/ClimatePanel';
+import Tour, { TourLauncher } from './components/Tour';
+import LandingPage from './components/LandingPage';
 import './styles/App.css';
 
 function App() {
+  const [showLanding, setShowLanding] = useState(true);
   const [selectedCoords, setSelectedCoords] = useState(null);
   const [zoneData, setZoneData] = useState(null);
   const [climateData, setClimateData] = useState(null);
@@ -149,6 +152,7 @@ function App() {
   const [panelVisible, setPanelVisible] = React.useState(true);
   const [localLon, setLocalLon] = React.useState('');
   const [localLat, setLocalLat] = React.useState('');
+  const [tourForceOpen, setTourForceOpen] = React.useState(false);
 
   React.useEffect(() => {
     if (selectedCoords) {
@@ -170,6 +174,10 @@ function App() {
         handleCoordinatesChange(parseFloat(localLon), num);
       }
     }
+  }
+
+  if (showLanding) {
+    return <LandingPage onEnter={() => setShowLanding(false)} />;
   }
 
   return (
@@ -194,7 +202,7 @@ function App() {
 
         {/* previous explorer placeholder moved below coordinates (rendered as subtitle) */}
 
-        <div className="shared-coords">
+        <div className="shared-coords" data-tour="coords">
           <p className="shared-coords-hint">Click on the map or enter coordinates to query climate and ecological zone data</p>
           <div className="coords-input">
             <label>
@@ -223,7 +231,7 @@ function App() {
         </div>
 
         {/* Explorer section: subtitle + Tier 1 and Tier 1b panels */}
-        <div className="explorer-section">
+        <div className="explorer-section" data-tour="tier">
           <div className="subtitle" role="note" aria-label="Previous Explorer Subtitle">
             <div className="subtitle-banner">
               <span className="subtitle-left">EXPLORER</span>
@@ -238,7 +246,7 @@ function App() {
           )}
 
           {/* Dataset selector */}
-          <div className="dataset-selector">
+          <div className="dataset-selector" data-tour="dataset">
             <button
               className={`dataset-btn${dataset === 'cru' ? ' dataset-btn--active' : ''}`}
               onClick={() => handleDatasetChange('cru')}
@@ -254,7 +262,7 @@ function App() {
           </div>
 
           {/* Year range selector for GCZ / GEZ / HLZ map tiles */}
-          <div className="year-range-selector">
+          <div className="year-range-selector" data-tour="yearRange">
             <button
               type="button"
               className="year-range-toggle"
@@ -343,7 +351,7 @@ function App() {
         </div>
 
         {/* EXPLORER Soils section */}
-        <div className="explorer-section explorer-section--spaced-bottom" style={{ marginTop: 12 }}>
+        <div className="explorer-section explorer-section--spaced-bottom" style={{ marginTop: 12 }} data-tour="soils">
           <div className="subtitle" role="note" aria-label="Soils Explorer Subtitle">
             <div className="subtitle-banner">
               <span className="subtitle-left">EXPLORER</span>
@@ -377,6 +385,9 @@ function App() {
           </div>
         </div>
       </div>
+
+      <TourLauncher onOpen={() => setTourForceOpen(true)} />
+      <Tour forceOpen={tourForceOpen} onClose={() => setTourForceOpen(false)} />
     </div>
   );
 }

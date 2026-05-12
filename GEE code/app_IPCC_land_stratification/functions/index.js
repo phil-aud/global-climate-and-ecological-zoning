@@ -24,6 +24,15 @@ const { getGczTempStats } = require('./handlers/getGczTempStats');
 // Initialize Earth Engine on cold start
 let eeInitialized = false;
 
+// Recognise "location has no data" errors thrown by sampling handlers and turn
+// them into a clean 200 response so the browser console doesn't show 500s for
+// what is really a valid-but-empty result (ocean clicks, no-data pixels, etc.).
+const NO_DATA_REGEX = /^(no\s+(data|sample|temperature\s+sample|precipitation\s+sample))/i;
+function isNoDataError(err) {
+  return err && typeof err.message === 'string' && NO_DATA_REGEX.test(err.message);
+}
+const NO_DATA_FRIENDLY = 'No climate data available at this location (likely over ocean or outside dataset coverage).';
+
 async function ensureEEInitialized() {
   if (eeInitialized) return;
 
@@ -58,6 +67,9 @@ exports.queryZones = functions.https.onRequest((req, res) => {
       const result = await queryZones(parseFloat(lon), parseFloat(lat), dataset);
       return res.status(200).json(result);
     } catch (error) {
+      if (isNoDataError(error)) {
+        return res.status(200).json({ noData: true, message: NO_DATA_FRIENDLY });
+      }
       console.error('Error in queryZones:', error);
       return res.status(500).json({ error: error.message || 'Internal server error', code: 'QUERY_ZONES_ERROR' });
     }
@@ -83,6 +95,9 @@ exports.getMonthlyClimate = functions.https.onRequest((req, res) => {
       const result = await getMonthlyClimate(parseFloat(lon), parseFloat(lat), parseInt(startYear), parseInt(endYear), dataset);
       return res.status(200).json(result);
     } catch (error) {
+      if (isNoDataError(error)) {
+        return res.status(200).json({ noData: true, message: NO_DATA_FRIENDLY });
+      }
       console.error('Error in getMonthlyClimate:', error);
       return res.status(500).json({ error: error.message || 'Internal server error', code: 'GET_MONTHLY_CLIMATE_ERROR' });
     }
@@ -108,6 +123,9 @@ exports.getAnnualSummary = functions.https.onRequest((req, res) => {
       const result = await getAnnualSummary(parseFloat(lon), parseFloat(lat), parseInt(startYear), parseInt(endYear), dataset);
       return res.status(200).json(result);
     } catch (error) {
+      if (isNoDataError(error)) {
+        return res.status(200).json({ noData: true, message: NO_DATA_FRIENDLY });
+      }
       console.error('Error in getAnnualSummary:', error);
       return res.status(500).json({ error: error.message || 'Internal server error', code: 'GET_ANNUAL_SUMMARY_ERROR' });
     }
@@ -150,6 +168,9 @@ exports.getBioecologicalData = functions.https.onRequest((req, res) => {
       const result = await getBioecologicalData(parseFloat(lon), parseFloat(lat), parseInt(startYear), parseInt(endYear), dataset);
       return res.status(200).json(result);
     } catch (error) {
+      if (isNoDataError(error)) {
+        return res.status(200).json({ noData: true, message: NO_DATA_FRIENDLY });
+      }
       console.error('Error in getBioecologicalData:', error);
       return res.status(500).json({ error: error.message || 'Internal server error', code: 'GET_BIOECOLOGICAL_DATA_ERROR' });
     }

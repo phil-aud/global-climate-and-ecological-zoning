@@ -23,7 +23,7 @@ const GCZ_COLORS = {
 
 function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, onError, bioData, dataset, onGczStatsUpdate }) {
   const minYear = dataset === 'terraclimate' ? 1958 : 1901;
-  const [startYear, setStartYear] = useState(2024);
+  const [startYear, setStartYear] = useState(1995);
   const [endYear, setEndYear] = useState(2024);
   const [annualSummary, setAnnualSummary] = useState(null);
   const [monthlyData, setMonthlyData] = useState(null);

@@ -69,6 +69,116 @@ function tileMaxNativeZoom(layer, dataset) {
 }
 
 /**
+ * Throttled L.TileLayer subclass.
+ *
+ * GEE's per-mapId tile worker pool is small (empirically ~6 concurrent
+ * requests). Leaflet by default fires *all* viewport tile requests in
+ * parallel — on initial load that's typically 16–24 tiles, plus another
+ * batch for the pattern overlay. The excess come back as HTTP 429
+ * ("Too Many Requests"), which the browser logs to the console and
+ * which then forces our retry path to re-issue them anyway.
+ *
+ * This subclass caps the number of in-flight tile requests at
+ * MAX_CONCURRENT and queues the rest. As each request finishes (load or
+ * error), the next queued request is dispatched.
+ */
+const MAX_CONCURRENT_TILES = 2;
+// Minimum spacing (ms) between consecutive dispatches. GEE enforces both a
+// concurrency cap and a per-second rate limit per mapId, so spacing alone is
+// not enough — without it, all tiles would burst in the first 50 ms.
+const MIN_DISPATCH_INTERVAL_MS = 120;
+let _inFlight = 0;
+// Initialise to a past timestamp so the very first dispatch is immediate.
+let _lastDispatchAt = -MIN_DISPATCH_INTERVAL_MS;
+let _drainTimer = null;
+const _tileQueue = [];
+
+function _drainTileQueue() {
+  if (_drainTimer) return;
+  while (_inFlight < MAX_CONCURRENT_TILES && _tileQueue.length > 0) {
+    const now = Date.now();
+    const wait = _lastDispatchAt + MIN_DISPATCH_INTERVAL_MS - now;
+    if (wait > 0) {
+      _drainTimer = setTimeout(() => {
+        _drainTimer = null;
+        _drainTileQueue();
+      }, wait);
+      return;
+    }
+    const fn = _tileQueue.shift();
+    _inFlight += 1;
+    _lastDispatchAt = now;
+    fn();
+  }
+}
+
+function _scheduleTileLoad(loader) {
+  _tileQueue.push(loader);
+  _drainTileQueue();
+}
+
+function _tileFinished() {
+  _inFlight = Math.max(0, _inFlight - 1);
+  _drainTileQueue();
+}
+
+const ThrottledTileLayer = L.TileLayer.extend({
+  createTile(coords, done) {
+    const tile = document.createElement('img');
+
+    L.DomEvent.on(tile, 'load', L.Util.bind(this._tileOnLoad, this, done, tile));
+    L.DomEvent.on(tile, 'error', L.Util.bind(this._tileOnError, this, done, tile));
+
+    if (this.options.crossOrigin || this.options.crossOrigin === '') {
+      tile.crossOrigin = this.options.crossOrigin === true ? '' : this.options.crossOrigin;
+    }
+    tile.alt = '';
+    tile.setAttribute('role', 'presentation');
+
+    const url = this.getTileUrl(coords);
+    let settled = false;
+
+    // Called when the tile's network request completes (load or error).
+    // Releases the in-flight slot for the next queued tile.
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      _tileFinished();
+    };
+    L.DomEvent.on(tile, 'load', finish);
+    L.DomEvent.on(tile, 'error', finish);
+
+    // _abortLoad just marks the tile cancelled. It does NOT release a slot —
+    // the tile is still in the queue at this point (src not yet set), so no
+    // slot has been taken. The loader will release when it runs.
+    tile._abortLoad = () => { tile._cancelled = true; };
+
+    _scheduleTileLoad(() => {
+      if (tile._cancelled) {
+        // This loader was dispatched from the queue (_inFlight was already
+        // incremented). Release that slot without making a network request.
+        _tileFinished();
+        return;
+      }
+      tile.src = url;
+    });
+
+    return tile;
+  },
+
+  // Override _removeTile so that queued (not-yet-dispatched) tiles are
+  // marked cancelled before Leaflet removes them, preventing wasted requests.
+  _removeTile(key) {
+    const tile = this._tiles[key];
+    if (tile && tile.el && tile.el._abortLoad) {
+      tile.el._abortLoad();
+    }
+    // Delegate to GridLayer (where _removeTile actually lives in Leaflet 1.x).
+    return L.GridLayer.prototype._removeTile.call(this, key);
+  },
+});
+
+/**
  * Manages the zone overlay tile layer imperatively so we can swap it
  * when the active layer or tile URLs change.
  *
@@ -85,59 +195,116 @@ function ZoneTileLayer({ tileUrl, opacity, maxNativeZoom = 8 }) {
   useEffect(() => {
     if (!tileUrl) return;
     if (layerRef.current) {
+      // Abort in-flight requests before swapping layers
+      if (layerRef.current._tiles) {
+        Object.values(layerRef.current._tiles).forEach(({ el }) => {
+          if (el && !el.complete) { el.onload = null; el.onerror = null; el.src = ''; }
+        });
+      }
       map.removeLayer(layerRef.current);
     }
-    layerRef.current = L.tileLayer(tileUrl, {
+    layerRef.current = new ThrottledTileLayer(tileUrl, {
       opacity,
       attribution: 'GEE / ee-philaudebert',
       maxZoom: 18,
       maxNativeZoom,
-      // Tagged so MapComponent.css can apply nearest-neighbour upscaling —
-      // categorical zone tiles stay razor-sharp past maxNativeZoom instead
-      // of being bilinear-blurred by the browser.
+      // Allow canvas pixel-reads so we can detect GEE cold-pipeline blank tiles.
+      crossOrigin: 'anonymous',
       className: 'gee-zone-tile',
-      // Keep more off-screen tiles in the DOM so panning/zooming doesn't
-      // re-request tiles GEE already rendered for us. Default is 2; bumping
-      // to 6 keeps a comfortable border around the viewport.
-      keepBuffer: 6,
-      // 1×1 transparent PNG — prevents the browser "broken image" icon
-      // from flashing while we retry.
+      // keepBuffer=1: only pre-load 1 tile beyond the viewport edge.
+      // GEE has a small per-mapId tile worker pool. Large keepBuffer values
+      // (e.g. 6) cause Leaflet to request hundreds of off-viewport tiles,
+      // saturating GEE's pool and leaving visible tiles stuck in the queue.
+      keepBuffer: 1,
+      // Don't request new tiles during a pinch/scroll zoom animation —
+      // the existing tiles are CSS-scaled during the animation anyway.
+      updateWhenZooming: false,
+      // 1×1 transparent PNG — prevents the browser "broken image" icon.
       errorTileUrl:
         'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=',
     }).addTo(map);
 
-    // GEE occasionally returns an error / times out on individual tile
-    // coords and Leaflet does NOT retry failed tiles by default — they just
-    // stay blank until the user pans away and back. Auto-retry up to 4
-    // times with backoff.
+    // Capture the original GEE URL at tileloadstart ONCE (do not overwrite on
+    // retry requests so originalSrc always points to the clean GEE URL).
+    const tileOriginalUrls = new Map();
+    layerRef.current.on('tileloadstart', (e) => {
+      if (e.tile && e.tile.src && !tileOriginalUrls.has(e.tile)) {
+        tileOriginalUrls.set(e.tile, e.tile.src);
+      }
+    });
+
+    // Retry HTTP-error tiles (4xx / 5xx) with exponential backoff + jitter.
+    // GEE's per-mapId tile pool is small and frequently returns HTTP 429
+    // ("Too Many Requests") on initial map load. A short fixed backoff causes
+    // every retry batch to hit the server simultaneously and 429 again, which
+    // the browser logs to the console for each failed request. Exponential
+    // backoff with jitter spreads retries out so they actually succeed.
     //
-    // SAFETY: Leaflet pools tile <img> elements and re-uses them for new
-    // coords during pan/zoom. By the time our setTimeout fires, `tileEl`
-    // may already be displaying a DIFFERENT tile — overwriting its src
-    // would corrupt that valid tile and cause the "some pixels appear and
-    // others disappear when I zoom" behaviour. We guard by capturing the
-    // failed URL prefix and bailing if the element has been recycled or
-    // detached from the DOM.
+    // IMPORTANT: GEE's tile endpoint rejects unknown query parameters with
+    // HTTP 400. Cache-bust the <img> using a URL **fragment** (#retry=N)
+    // instead — fragments are not sent to the server but still make the
+    // browser treat the URL as new and re-issue the request.
     const retryCounts = new WeakMap();
     layerRef.current.on('tileerror', (e) => {
       const tileEl = e.tile;
       if (!tileEl) return;
-      const failedSrc = tileEl.src;
-      // Strip any previous _retry param so the prefix match is stable.
-      const prefix = failedSrc.split('?')[0];
+      const originalSrc = tileOriginalUrls.get(tileEl);
+      if (!originalSrc || originalSrc.startsWith('data:')) return;
       const tries = (retryCounts.get(tileEl) || 0) + 1;
-      if (tries > 4) return;
+      if (tries > 5) return;
       retryCounts.set(tileEl, tries);
+      // 1.5 s, 3 s, 6 s, 12 s, 24 s + up to 50% jitter
+      const base = 1500 * Math.pow(2, tries - 1);
+      const delay = base + Math.random() * base * 0.5;
       setTimeout(() => {
-        if (!tileEl.parentNode) return;                  // detached
-        if (!tileEl.src.startsWith(prefix)) return;      // recycled for a new coord
-        const sep = failedSrc.includes('?') ? '&' : '?';
-        tileEl.src = `${failedSrc}${sep}_retry=${tries}`;
-      }, 400 * tries);
+        if (!tileEl.parentNode) return;
+        tileEl.src = `${originalSrc}#retry=${tries}`;
+      }, delay);
     });
+
+    // Detect GEE cold-pipeline blank tiles (HTTP 200, transparent PNG).
+    // These never trigger tileerror, so we inspect each loaded tile by sampling
+    // its centre pixel via canvas. If alpha === 0 the tile is blank and we
+    // retry it individually — no setUrl, so other tiles are never disturbed.
+    const blankRetryCounts = new WeakMap();
+    layerRef.current.on('tileload', (e) => {
+      const tileEl = e.tile;
+      const originalSrc = tileOriginalUrls.get(tileEl);
+      if (!originalSrc || originalSrc.startsWith('data:')) return;
+      if ((blankRetryCounts.get(tileEl) || 0) >= 3) return;
+      try {
+        const check = document.createElement('canvas');
+        check.width = 1; check.height = 1;
+        const ctx = check.getContext('2d');
+        // Sample the centre pixel of the 256×256 tile
+        ctx.drawImage(tileEl, 128, 128, 1, 1, 0, 0, 1, 1);
+        const alpha = ctx.getImageData(0, 0, 1, 1).data[3];
+        if (alpha > 0) return; // tile has real data — nothing to do
+      } catch (_) {
+        return; // CORS / tainted-canvas error — can't check, leave tile as-is
+      }
+      // Tile is fully transparent → GEE pipeline was cold. Schedule a retry.
+      const tries = (blankRetryCounts.get(tileEl) || 0) + 1;
+      blankRetryCounts.set(tileEl, tries);
+      setTimeout(() => {
+        if (!tileEl.parentNode) return;
+        tileEl.src = `${originalSrc}#blank_retry=${tries}`;
+      }, 3000 * tries); // 3 s, 6 s, 9 s
+    });
+
     return () => {
       if (layerRef.current) {
-        map.removeLayer(layerRef.current);
+        const layer = layerRef.current;
+        if (layer._tiles) {
+          Object.values(layer._tiles).forEach(({ el }) => {
+            if (el && !el.complete) {
+              el.onload = null;
+              el.onerror = null;
+              el.src = '';
+            }
+          });
+        }
+        map.removeLayer(layer);
         layerRef.current = null;
       }
     };
@@ -207,19 +374,40 @@ function PatternTileLayer({ patternUrl, opacity, maxNativeZoom = 8 }) {
         const img = new Image();
         img.crossOrigin = 'anonymous';
 
-        // Retry transient GEE tile failures.
+        // Route pattern-tile loads through the same global concurrency queue
+        // used by ThrottledTileLayer so the colour layer + pattern layer share
+        // GEE's small per-mapId tile worker pool instead of doubling it.
+        let slotReleased = false;
+        const releaseSlot = () => {
+          if (slotReleased) return;
+          slotReleased = true;
+          _tileFinished();
+        };
+
+        // Retry transient GEE tile failures (HTTP 429 / 5xx) with exponential
+        // backoff + jitter so we don't keep slamming GEE's rate-limited tile
+        // pool with synchronized retries. Cache-bust via URL fragment so we
+        // don't add unknown query params (GEE returns 400 for those).
         let attempts = 0;
         img.onerror = function () {
+          releaseSlot();
           attempts += 1;
-          if (attempts > 4) {
+          if (attempts > 5) {
             done(null, canvas);
             return;
           }
-          const sep = url.includes('?') ? '&' : '?';
-          setTimeout(() => { img.src = `${url}${sep}_retry=${attempts}`; }, 400 * attempts);
+          const base = 1500 * Math.pow(2, attempts - 1);
+          const delay = base + Math.random() * base * 0.5;
+          setTimeout(() => {
+            _scheduleTileLoad(() => {
+              slotReleased = false;
+              img.src = `${url}#retry=${attempts}`;
+            });
+          }, delay);
         };
 
         img.onload = function () {
+          releaseSlot();
           const w = tileSize.x;
           const h = tileSize.y;
 
@@ -311,22 +499,22 @@ function PatternTileLayer({ patternUrl, opacity, maxNativeZoom = 8 }) {
 
             switch (best + 1) {
               case 1: // right-diagonal hatch (/)  — matches legend 'right-hatch'
-                if ((px - py + 2048) % 10 < 2) mark(i, HATCH_A);
+                if ((px - py + 2048) % 7 < 2) mark(i, HATCH_A);
                 break;
               case 2: // left-diagonal hatch (\)   — matches legend 'left-hatch'
-                if ((px + py) % 10 < 2) mark(i, HATCH_A);
+                if ((px + py) % 7 < 2) mark(i, HATCH_A);
                 break;
               case 3: // vertical lines |||         — matches legend 'vertical'
-                if (px % 10 < 2) mark(i, VERT_A);
+                if (px % 7 < 2) mark(i, VERT_A);
                 break;
               case 4: // X cross-hatch              — matches legend 'x'
-                if ((px - py + 2048) % 10 < 2 || (px + py) % 10 < 2) mark(i, X_A);
+                if ((px - py + 2048) % 7 < 2 || (px + py) % 7 < 2) mark(i, X_A);
                 break;
               case 5: // dots                       — matches legend 'points'
-                if (px % 10 < 3 && py % 10 < 3) mark(i, DOT_A);
+                if (px % 8 < 3 && py % 8 < 3) mark(i, DOT_A);
                 break;
               case 6: // snowflake +                — matches legend 'snowflake'
-                if (px % 16 === 0 && py % 16 === 0) {
+                if (px % 12 === 0 && py % 12 === 0) {
                   for (let arm = -3; arm <= 3; arm++) {
                     mark(i + arm * 4, STAR_A);          // horizontal arm
                     mark(i + arm * w * 4, STAR_A);      // vertical arm
@@ -341,7 +529,7 @@ function PatternTileLayer({ patternUrl, opacity, maxNativeZoom = 8 }) {
           done(null, canvas);
         };
 
-        img.src = url;
+        _scheduleTileLoad(() => { img.src = url; });
         return canvas;
       },
     });
@@ -353,7 +541,7 @@ function PatternTileLayer({ patternUrl, opacity, maxNativeZoom = 8 }) {
       // No maxNativeZoom here — the GridLayer must generate fresh canvas tiles
       // at every zoom level so symbols keep a consistent screen size.
       // The GEE URL is clamped to geeMaxZoom internally above.
-      keepBuffer: 6,
+      keepBuffer: 1,
     });
     layer.addTo(map);
     layerRef.current = layer;
@@ -437,9 +625,9 @@ function getZonePattern(value) {
   }
 }
 
-const _DOT   = `radial-gradient(circle, rgba(0,0,0,0.38) 1px, transparent 1px) 0 0 / 5px 5px`;
-const _HATCH = `repeating-linear-gradient(135deg, rgba(0,0,0,0.28) 0, rgba(0,0,0,0.28) 1px, transparent 1px, transparent 5px)`;
-const _HATCH2 = `repeating-linear-gradient(45deg, rgba(0,0,0,0.28) 0, rgba(0,0,0,0.28) 1px, transparent 1px, transparent 5px)`;
+const _DOT   = `radial-gradient(circle, rgba(0,0,0,0.38) 1px, transparent 1px) 0 0 / 8px 8px`;
+const _HATCH = `repeating-linear-gradient(135deg, rgba(0,0,0,0.28) 0, rgba(0,0,0,0.28) 1px, transparent 1px, transparent 7px)`;
+const _HATCH2 = `repeating-linear-gradient(45deg, rgba(0,0,0,0.28) 0, rgba(0,0,0,0.28) 1px, transparent 1px, transparent 7px)`;
 
 function getSwatchStyle(color, pattern) {
   switch (pattern) {
@@ -447,7 +635,7 @@ function getSwatchStyle(color, pattern) {
     case 'left-hatch':   return { background: `${_HATCH}, ${color}` };
     case 'right-hatch':  return { background: `${_HATCH2}, ${color}` };
     case 'x':            return { background: `${_HATCH}, ${_HATCH2}, ${color}` };
-    case 'vertical':     return { background: `repeating-linear-gradient(90deg, rgba(0,0,0,0.28) 0, rgba(0,0,0,0.28) 1px, transparent 1px, transparent 4px), ${color}` };
+    case 'vertical':     return { background: `repeating-linear-gradient(90deg, rgba(0,0,0,0.28) 0, rgba(0,0,0,0.28) 1px, transparent 1px, transparent 7px), ${color}` };
     case 'waves':        return { background: `repeating-linear-gradient(0deg, rgba(0,0,0,0.28) 0, rgba(0,0,0,0.28) 2px, transparent 2px, transparent 10px), ${color}` };
     case 'snowflake': {
       const svg = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><polygon points="4,0 4.7,2.6 7.6,2.6 5.1,4.1 5.8,6.9 4,5.2 2.2,6.9 2.9,4.1 0.4,2.6 3.3,2.6" fill="rgba(0,0,0,0.6)"/></svg>');
@@ -564,65 +752,78 @@ function MapComponent({ onMapClick, selectedCoords, zoneData, panelVisible, onPa
   const [tileUrls, setTileUrls] = useState(null);
   const [tilesLoading, setTilesLoading] = useState(true);
   const [tilesError, setTilesError] = useState(null);
+  // Separate state for HLZ III pattern layer (fetched independently).
+  const [patternLoading, setPatternLoading] = useState(false);
+  const [patternError, setPatternError] = useState(null);
   const [activeLayer, setActiveLayer] = useState('gez');
   const [opacity, setOpacity] = useState(0.75);
   const [legendCollapsed, setLegendCollapsed] = useState(false);
 
-  // Fetch tile URLs when dataset/year range changes.
-  // Strategy: fetch the *active* layer first (one fast getMapId call) so the
-  // map can render quickly, then prefetch the remaining layers in parallel
-  // in the background. The previous bundle approach forced the response to
-  // wait for the slowest layer (hlzIII / soil), making even a trivial GEZ
-  // tile take 30–60 s to appear.
+  // Reset cached URLs whenever the dataset or year range changes.
+  useEffect(() => {
+    setTileUrls(null);
+  }, [dataset, startYear, endYear]);
+
+  // ── Fetch the active SLD layer independently ────────────────────────────
+  // Each layer is fetched on-demand when the user switches to it and cached
+  // in tileUrls so repeated switches don't re-hit the server.
   useEffect(() => {
     let cancelled = false;
-    const ALL = ['gcz', 'gez', 'hlzII', 'hlzIII', 'hlzIIIPattern', 'soil'];
-    const PRIORITY = [activeLayer, ...ALL.filter((l) => l !== activeLayer)];
 
-    async function fetchLayerWithRetry(layer, attemptsLeft, delay) {
+    async function fetchLayer(attemptsLeft, delay) {
       try {
-        const url = await getMapTileLayer(layer, dataset, startYear, endYear);
+        const url = await getMapTileLayer(activeLayer, dataset, startYear, endYear);
         if (cancelled) return;
-        setTileUrls((prev) => ({ ...(prev || {}), [layer]: url }));
-        // No tile prewarm: GEE serialises tile renders per mapId on a small
-        // worker pool. Bulk-prewarming dozens of off-screen tiles starves
-        // the *visible* tile requests — GEE silently returns blank tiles
-        // when overloaded (no HTTP error, so Leaflet's tileerror never
-        // fires and our retry never kicks in). The fastest way to render
-        // the visible viewport is to let Leaflet request only what it
-        // actually needs.
-        if (layer === activeLayer) {
-          setTilesError(null);
-          setTilesLoading(false);
-        }
+        setTileUrls((prev) => ({ ...(prev || {}), [activeLayer]: url }));
+        setTilesError(null);
+        setTilesLoading(false);
       } catch (err) {
         if (cancelled) return;
         if (attemptsLeft <= 1) {
-          if (layer === activeLayer) {
-            setTilesError(err.message);
-            setTilesLoading(false);
-          }
-          // Background-layer failures are silent; user can switch layers later.
+          setTilesError(err.message);
+          setTilesLoading(false);
           return;
         }
-        setTimeout(
-          () => fetchLayerWithRetry(layer, attemptsLeft - 1, Math.min(delay * 2, 10000)),
-          delay
-        );
+        setTimeout(() => fetchLayer(attemptsLeft - 1, Math.min(delay * 2, 8000)), delay);
       }
     }
 
     setTilesLoading(true);
-    // Reset the cached map so we don't show stale URLs from another dataset.
-    setTileUrls(null);
-
-    // Fire the active layer first; then prefetch the rest right after.
-    fetchLayerWithRetry(PRIORITY[0], 5, 2000);
-    PRIORITY.slice(1).forEach((layer) => fetchLayerWithRetry(layer, 5, 2000));
-
+    setTilesError(null);
+    fetchLayer(3, 2000);
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataset, startYear, endYear]);
+  }, [activeLayer, dataset, startYear, endYear]);
+
+  // ── Fetch the HLZ III pattern layer independently ───────────────────────
+  // Only triggered when HLZ III is active. Runs concurrently with the SLD
+  // fetch above so the color tiles and pattern tiles load in parallel.
+  useEffect(() => {
+    if (activeLayer !== 'hlzIII') return;
+    let cancelled = false;
+
+    async function fetchPattern(attemptsLeft, delay) {
+      try {
+        const url = await getMapTileLayer('hlzIIIPattern', dataset, startYear, endYear);
+        if (cancelled) return;
+        setTileUrls((prev) => ({ ...(prev || {}), hlzIIIPattern: url }));
+        setPatternError(null);
+        setPatternLoading(false);
+      } catch (err) {
+        if (cancelled) return;
+        if (attemptsLeft <= 1) {
+          setPatternError(err.message);
+          setPatternLoading(false);
+          return;
+        }
+        setTimeout(() => fetchPattern(attemptsLeft - 1, Math.min(delay * 2, 8000)), delay);
+      }
+    }
+
+    setPatternLoading(true);
+    setPatternError(null);
+    fetchPattern(3, 2000);
+    return () => { cancelled = true; };
+  }, [activeLayer, dataset, startYear, endYear]);
 
   // Determine the highlighted zone value for the active layer
   const highlightValue = (() => {
@@ -635,6 +836,7 @@ function MapComponent({ onMapClick, selectedCoords, zoneData, panelVisible, onPa
   })();
 
   const activeTileUrl = tileUrls ? tileUrls[activeLayer] : null;
+  const patternTileUrl = tileUrls ? tileUrls.hlzIIIPattern : null;
   const mapCenter = selectedCoords ? [selectedCoords.lat, selectedCoords.lon] : [20, 0];
   const mapZoom = selectedCoords ? 6 : 2;
 
@@ -646,13 +848,23 @@ function MapComponent({ onMapClick, selectedCoords, zoneData, panelVisible, onPa
       {/* Opacity slider (top-right overlay) */}
       <OpacitySlider value={opacity} onChange={setOpacity} />
 
-      {/* Tile loading / error indicator */}
+      {/* SLD layer loading / error indicator */}
       {tilesLoading && (
-        <div className="map-status map-status--loading">Loading zone layers…</div>
+        <div className="map-status map-status--loading">Loading zone layer…</div>
       )}
       {tilesError && !tilesLoading && (
         <div className="map-status map-status--error">
           Zone overlay unavailable: {tilesError}
+        </div>
+      )}
+
+      {/* HLZ III pattern layer loading / error indicator (independent) */}
+      {activeLayer === 'hlzIII' && patternLoading && !tilesLoading && (
+        <div className="map-status map-status--loading map-status--pattern">Loading pattern overlay…</div>
+      )}
+      {activeLayer === 'hlzIII' && patternError && !patternLoading && (
+        <div className="map-status map-status--error map-status--pattern">
+          Pattern overlay unavailable: {patternError}
         </div>
       )}
 
@@ -669,7 +881,7 @@ function MapComponent({ onMapClick, selectedCoords, zoneData, panelVisible, onPa
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         />
 
-        {/* GEE zone overlay */}
+        {/* GEE zone SLD overlay — mounts as soon as its URL arrives */}
         {activeTileUrl && (
           <ZoneTileLayer
             tileUrl={activeTileUrl}
@@ -678,12 +890,12 @@ function MapComponent({ onMapClick, selectedCoords, zoneData, panelVisible, onPa
           />
         )}
 
-        {/* Pattern overlay for HLZ III (canvas tile layer, client-side) */}
-        {activeLayer === 'hlzIII' && tileUrls?.hlzIIIPattern && (
+        {/* HLZ III pattern overlay — fetched independently, mounts when its URL arrives */}
+        {activeLayer === 'hlzIII' && patternTileUrl && (
           <PatternTileLayer
-            patternUrl={tileUrls.hlzIIIPattern}
+            patternUrl={patternTileUrl}
             opacity={opacity}
-            maxNativeZoom={tileMaxNativeZoom('hlzIIIPattern', dataset)}
+            maxNativeZoom={tileMaxNativeZoom('hlzIII', dataset)}
           />
         )}
 

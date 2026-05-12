@@ -140,6 +140,11 @@
   border: 1px solid #ef9a9a;
 }
 
+/* Pattern layer status sits just above the main status badge */
+.map-status--pattern {
+  bottom: 76px;
+}
+
 /* ── Coordinate display ───────────────────────────────────────────────────── */
 
 .coord-display {

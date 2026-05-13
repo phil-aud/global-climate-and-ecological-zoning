@@ -202,8 +202,13 @@ function _buildHLZImage(t0Bio, hasFrost, annualPrecip, annualPet, elevation) {
 
   // ── Moisture class (circumcenter-of-hypotenuse) ──
   const map       = annualPrecip;
-  const petRatio  = annualPet.divide(map);
-  const nMap      = map.divide(62.5).log().divide(ee.Number(2).log()).add(1);
+  // Reclassify precipitation == 0 → 1 mm/yr so 0-precip pixels don't collapse
+  // to petRatio = 0 (which would mis-classify true deserts). map.eq(0) is 1
+  // only where precipitation is exactly 0, so non-zero pixels are unchanged.
+  // Note: masked (no-data) pixels remain masked.
+  const safeMap   = map.eq(0).add(map);
+  const petRatio  = annualPet.divide(safeMap);
+  const nMap      = safeMap.divide(62.5).log().divide(ee.Number(2).log()).add(1);
   const nPetRatio = petRatio.divide(0.125).log().divide(ee.Number(2).log()).add(1);
 
   const ch = petRatioMax => {

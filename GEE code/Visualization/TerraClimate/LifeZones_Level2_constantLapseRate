@@ -185,9 +185,14 @@ var holdridgeLifeZones = function(startYear, endYear) {
   var polarZone = polar;
 
   // -- Precipitation & PET ratios --
+  // Reclassify precipitation == 0 → 1 mm/yr so 0-precip pixels don't collapse
+  // to petRatio = 0 (which would mis-classify true deserts). map.eq(0) is 1
+  // only where precipitation is exactly 0, so non-zero pixels are unchanged.
+  // Note: masked (no-data) pixels remain masked.
   var map       = tcPre.sum().rename('precipitation');
-  var petRatio  = annualPet.divide(map).rename('petRatio');
-  var nMap      = map.divide(62.5).log().divide(ee.Number(2).log()).add(1);
+  var safeMap   = map.eq(0).add(map);
+  var petRatio  = annualPet.divide(safeMap).rename('petRatio');
+  var nMap      = safeMap.divide(62.5).log().divide(ee.Number(2).log()).add(1);
   var nPetRatio = petRatio.divide(0.125).log().divide(ee.Number(2).log()).add(1);
 
   var ch = function(petRatioMax) {

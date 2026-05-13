@@ -120,7 +120,9 @@ async function getBioecologicalData(lon, lat, startYear, endYear, dataset = 'cru
     }
     const tBioVal  = tBioSum / 12;
     const petVal   = climResult['pet'] ?? 0;
-    const petRatio = precip > 0 ? petVal / precip : 0;
+    // Match the GEE-side floor: when precip is 0, divide by 1 mm so the
+    // returned petRatio reflects the desert classification instead of 0.
+    const petRatio = petVal / Math.max(precip, 1);
 
     const elevVal   = elevResult?.elevation ?? 0;
     const lapseRate = 6;
@@ -181,7 +183,10 @@ async function getBioecologicalData(lon, lat, startYear, endYear, dataset = 'cru
   // cruPetYearlyMean = monthlyMeanD().mean().multiply(getAverageDaysInYear())
   const avgDaysInYear = getAverageDaysInYear(startYear, endYear);
   const annualPet = ee.ImageCollection.fromImages(monthlyPetImages).mean().multiply(avgDaysInYear);
-  const petRatioBands = annualPet.divide(preBands).rename('petRatio');
+  // Reclassify precipitation == 0 → 1 mm/yr for the petRatio divisor only —
+  // the displayed `precipitation` band is untouched. Prevents 0-precip pixels
+  // from yielding petRatio = 0 (true deserts).
+  const petRatioBands = annualPet.divide(preBands.eq(0).add(preBands)).rename('petRatio');
 
   // var elevationBands = elevationData.rename('elevation');
   const elevationBands = elevation.rename('elevation');

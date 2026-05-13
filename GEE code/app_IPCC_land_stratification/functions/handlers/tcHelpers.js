@@ -220,159 +220,169 @@ function _buildHLZImage(t0Bio, hasFrost, annualPrecip, annualPet, elevation) {
   const tPM = (belt, v) => belt.multiply(chSW.gt(v - 1).multiply(chSW.lte(v)));
 
   // ── Life zone image ──
-  return (
+  // Build all belt x moisture-class layers as a flat list and reduce with
+  // ImageCollection.sum(). Same arithmetic as a long chain of .add(...) calls
+  // (parts are pairwise disjoint per pixel, so summing == OR-combining), but
+  // GEE reduces flat lists in parallel rather than walking a deep dependency
+  // tree -- dramatically faster. Cast each part to a common dtype + band name
+  // so .sum() sees a homogeneous collection. Output is byte-identical to the
+  // previous chained .add(...) form.
+  const _parts = [
     // Tropical Basal
-    tropicalBasal.multiply(chT.gt(8)).multiply(111)
-    .add(tropicalBasal.multiply(chT.gt(7).multiply(chT.lte(8))).multiply(112))
-    .add(tropicalBasal.multiply(chT.gt(6).multiply(chT.lte(7))).multiply(113))
-    .add(tropicalBasal.multiply(chT.gt(5).multiply(chT.lte(6))).multiply(114))
-    .add(tropicalBasal.multiply(chT.gt(4).multiply(chT.lte(5))).multiply(115))
-    .add(tropicalBasal.multiply(chT.gt(3).multiply(chT.lte(4))).multiply(116))
-    .add(tropicalBasal.multiply(chT.gt(2).multiply(chT.lte(3))).multiply(117))
-    .add(tropicalBasal.multiply(chT.lte(2)).multiply(118))
+    tropicalBasal.multiply(chT.gt(8)).multiply(111),
+    tropicalBasal.multiply(chT.gt(7).multiply(chT.lte(8))).multiply(112),
+    tropicalBasal.multiply(chT.gt(6).multiply(chT.lte(7))).multiply(113),
+    tropicalBasal.multiply(chT.gt(5).multiply(chT.lte(6))).multiply(114),
+    tropicalBasal.multiply(chT.gt(4).multiply(chT.lte(5))).multiply(115),
+    tropicalBasal.multiply(chT.gt(3).multiply(chT.lte(4))).multiply(116),
+    tropicalBasal.multiply(chT.gt(2).multiply(chT.lte(3))).multiply(117),
+    tropicalBasal.multiply(chT.lte(2)).multiply(118),
     // Tropical Premontane
-    .add(tropicalPremontane.multiply(chSW.gt(7)).multiply(121))
-    .add(tPM(tropicalPremontane, 7).multiply(122))
-    .add(tPM(tropicalPremontane, 6).multiply(123))
-    .add(tPM(tropicalPremontane, 5).multiply(124))
-    .add(tPM(tropicalPremontane, 4).multiply(125))
-    .add(tPM(tropicalPremontane, 3).multiply(126))
-    .add(tropicalPremontane.multiply(chSW.lte(2)).multiply(127))
+    tropicalPremontane.multiply(chSW.gt(7)).multiply(121),
+    tPM(tropicalPremontane, 7).multiply(122),
+    tPM(tropicalPremontane, 6).multiply(123),
+    tPM(tropicalPremontane, 5).multiply(124),
+    tPM(tropicalPremontane, 4).multiply(125),
+    tPM(tropicalPremontane, 3).multiply(126),
+    tropicalPremontane.multiply(chSW.lte(2)).multiply(127),
     // Tropical Lower Montane
-    .add(tropicalLowerMontane.multiply(chSW.gt(7)).multiply(131))
-    .add(tPM(tropicalLowerMontane, 7).multiply(132))
-    .add(tPM(tropicalLowerMontane, 6).multiply(133))
-    .add(tPM(tropicalLowerMontane, 5).multiply(134))
-    .add(tPM(tropicalLowerMontane, 4).multiply(135))
-    .add(tPM(tropicalLowerMontane, 3).multiply(136))
-    .add(tropicalLowerMontane.multiply(chSW.lte(2)).multiply(137))
+    tropicalLowerMontane.multiply(chSW.gt(7)).multiply(131),
+    tPM(tropicalLowerMontane, 7).multiply(132),
+    tPM(tropicalLowerMontane, 6).multiply(133),
+    tPM(tropicalLowerMontane, 5).multiply(134),
+    tPM(tropicalLowerMontane, 4).multiply(135),
+    tPM(tropicalLowerMontane, 3).multiply(136),
+    tropicalLowerMontane.multiply(chSW.lte(2)).multiply(137),
     // Tropical Montane
-    .add(tropicalMontane.multiply(chC.gt(6)).multiply(141))
-    .add(tropicalMontane.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(142))
-    .add(tropicalMontane.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(143))
-    .add(tropicalMontane.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(144))
-    .add(tropicalMontane.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(145))
-    .add(tropicalMontane.multiply(chC.lte(2)).multiply(146))
+    tropicalMontane.multiply(chC.gt(6)).multiply(141),
+    tropicalMontane.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(142),
+    tropicalMontane.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(143),
+    tropicalMontane.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(144),
+    tropicalMontane.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(145),
+    tropicalMontane.multiply(chC.lte(2)).multiply(146),
     // Tropical Subalpine
-    .add(tropicalSubalpine.multiply(chB.gt(5)).multiply(151))
-    .add(tropicalSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(152))
-    .add(tropicalSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(153))
-    .add(tropicalSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(154))
-    .add(tropicalSubalpine.multiply(chB.lte(2)).multiply(155))
+    tropicalSubalpine.multiply(chB.gt(5)).multiply(151),
+    tropicalSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(152),
+    tropicalSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(153),
+    tropicalSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(154),
+    tropicalSubalpine.multiply(chB.lte(2)).multiply(155),
     // Tropical Alpine
-    .add(tropicalAlpine.multiply(chSP.gt(4)).multiply(161))
-    .add(tropicalAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(162))
-    .add(tropicalAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(163))
-    .add(tropicalAlpine.multiply(chSP.lte(2)).multiply(164))
+    tropicalAlpine.multiply(chSP.gt(4)).multiply(161),
+    tropicalAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(162),
+    tropicalAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(163),
+    tropicalAlpine.multiply(chSP.lte(2)).multiply(164),
     // Tropical Nival
-    .add(tropicalNival.multiply(171))
+    tropicalNival.multiply(171),
     // Subtropical Basal
-    .add(subtropicalBasal.multiply(chSW.gt(7)).multiply(211))
-    .add(tPM(subtropicalBasal, 7).multiply(212))
-    .add(tPM(subtropicalBasal, 6).multiply(213))
-    .add(tPM(subtropicalBasal, 5).multiply(214))
-    .add(tPM(subtropicalBasal, 4).multiply(215))
-    .add(tPM(subtropicalBasal, 3).multiply(216))
-    .add(subtropicalBasal.multiply(chSW.lte(2)).multiply(217))
+    subtropicalBasal.multiply(chSW.gt(7)).multiply(211),
+    tPM(subtropicalBasal, 7).multiply(212),
+    tPM(subtropicalBasal, 6).multiply(213),
+    tPM(subtropicalBasal, 5).multiply(214),
+    tPM(subtropicalBasal, 4).multiply(215),
+    tPM(subtropicalBasal, 3).multiply(216),
+    subtropicalBasal.multiply(chSW.lte(2)).multiply(217),
     // Subtropical Lower Montane
-    .add(subtropicalLowerMontane.multiply(chSW.gt(7)).multiply(221))
-    .add(tPM(subtropicalLowerMontane, 7).multiply(222))
-    .add(tPM(subtropicalLowerMontane, 6).multiply(223))
-    .add(tPM(subtropicalLowerMontane, 5).multiply(224))
-    .add(tPM(subtropicalLowerMontane, 4).multiply(225))
-    .add(tPM(subtropicalLowerMontane, 3).multiply(226))
-    .add(subtropicalLowerMontane.multiply(chSW.lte(2)).multiply(227))
+    subtropicalLowerMontane.multiply(chSW.gt(7)).multiply(221),
+    tPM(subtropicalLowerMontane, 7).multiply(222),
+    tPM(subtropicalLowerMontane, 6).multiply(223),
+    tPM(subtropicalLowerMontane, 5).multiply(224),
+    tPM(subtropicalLowerMontane, 4).multiply(225),
+    tPM(subtropicalLowerMontane, 3).multiply(226),
+    subtropicalLowerMontane.multiply(chSW.lte(2)).multiply(227),
     // Subtropical Montane
-    .add(subtropicalMontane.multiply(chC.gt(6)).multiply(231))
-    .add(subtropicalMontane.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(232))
-    .add(subtropicalMontane.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(233))
-    .add(subtropicalMontane.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(234))
-    .add(subtropicalMontane.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(235))
-    .add(subtropicalMontane.multiply(chC.lte(2)).multiply(236))
+    subtropicalMontane.multiply(chC.gt(6)).multiply(231),
+    subtropicalMontane.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(232),
+    subtropicalMontane.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(233),
+    subtropicalMontane.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(234),
+    subtropicalMontane.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(235),
+    subtropicalMontane.multiply(chC.lte(2)).multiply(236),
     // Subtropical Subalpine
-    .add(subtropicalSubalpine.multiply(chB.gt(5)).multiply(241))
-    .add(subtropicalSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(242))
-    .add(subtropicalSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(243))
-    .add(subtropicalSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(244))
-    .add(subtropicalSubalpine.multiply(chB.lte(2)).multiply(245))
+    subtropicalSubalpine.multiply(chB.gt(5)).multiply(241),
+    subtropicalSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(242),
+    subtropicalSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(243),
+    subtropicalSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(244),
+    subtropicalSubalpine.multiply(chB.lte(2)).multiply(245),
     // Subtropical Alpine
-    .add(subtropicalAlpine.multiply(chSP.gt(4)).multiply(251))
-    .add(subtropicalAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(252))
-    .add(subtropicalAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(253))
-    .add(subtropicalAlpine.multiply(chSP.lte(2)).multiply(254))
+    subtropicalAlpine.multiply(chSP.gt(4)).multiply(251),
+    subtropicalAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(252),
+    subtropicalAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(253),
+    subtropicalAlpine.multiply(chSP.lte(2)).multiply(254),
     // Subtropical Nival
-    .add(subtropicalNival.multiply(261))
+    subtropicalNival.multiply(261),
     // Warm Temperate Basal
-    .add(warmTemperateBasal.multiply(chSW.gt(7)).multiply(311))
-    .add(tPM(warmTemperateBasal, 7).multiply(312))
-    .add(tPM(warmTemperateBasal, 6).multiply(313))
-    .add(tPM(warmTemperateBasal, 5).multiply(314))
-    .add(tPM(warmTemperateBasal, 4).multiply(315))
-    .add(tPM(warmTemperateBasal, 3).multiply(316))
-    .add(warmTemperateBasal.multiply(chSW.lte(2)).multiply(317))
+    warmTemperateBasal.multiply(chSW.gt(7)).multiply(311),
+    tPM(warmTemperateBasal, 7).multiply(312),
+    tPM(warmTemperateBasal, 6).multiply(313),
+    tPM(warmTemperateBasal, 5).multiply(314),
+    tPM(warmTemperateBasal, 4).multiply(315),
+    tPM(warmTemperateBasal, 3).multiply(316),
+    warmTemperateBasal.multiply(chSW.lte(2)).multiply(317),
     // Warm Temperate Montane
-    .add(warmTemperateMontane.multiply(chC.gt(6)).multiply(321))
-    .add(warmTemperateMontane.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(322))
-    .add(warmTemperateMontane.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(323))
-    .add(warmTemperateMontane.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(324))
-    .add(warmTemperateMontane.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(325))
-    .add(warmTemperateMontane.multiply(chC.lte(2)).multiply(326))
+    warmTemperateMontane.multiply(chC.gt(6)).multiply(321),
+    warmTemperateMontane.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(322),
+    warmTemperateMontane.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(323),
+    warmTemperateMontane.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(324),
+    warmTemperateMontane.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(325),
+    warmTemperateMontane.multiply(chC.lte(2)).multiply(326),
     // Warm Temperate Subalpine
-    .add(warmTemperateSubalpine.multiply(chB.gt(5)).multiply(331))
-    .add(warmTemperateSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(332))
-    .add(warmTemperateSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(333))
-    .add(warmTemperateSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(334))
-    .add(warmTemperateSubalpine.multiply(chB.lte(2)).multiply(335))
+    warmTemperateSubalpine.multiply(chB.gt(5)).multiply(331),
+    warmTemperateSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(332),
+    warmTemperateSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(333),
+    warmTemperateSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(334),
+    warmTemperateSubalpine.multiply(chB.lte(2)).multiply(335),
     // Warm Temperate Alpine
-    .add(warmTemperateAlpine.multiply(chSP.gt(4)).multiply(341))
-    .add(warmTemperateAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(342))
-    .add(warmTemperateAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(343))
-    .add(warmTemperateAlpine.multiply(chSP.lte(2)).multiply(344))
+    warmTemperateAlpine.multiply(chSP.gt(4)).multiply(341),
+    warmTemperateAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(342),
+    warmTemperateAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(343),
+    warmTemperateAlpine.multiply(chSP.lte(2)).multiply(344),
     // Warm Temperate Nival
-    .add(warmTemperateNival.multiply(351))
+    warmTemperateNival.multiply(351),
     // Cool Temperate Basal
-    .add(coolTemperateBasal.multiply(chC.gt(6)).multiply(411))
-    .add(coolTemperateBasal.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(412))
-    .add(coolTemperateBasal.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(413))
-    .add(coolTemperateBasal.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(414))
-    .add(coolTemperateBasal.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(415))
-    .add(coolTemperateBasal.multiply(chC.lte(2)).multiply(416))
+    coolTemperateBasal.multiply(chC.gt(6)).multiply(411),
+    coolTemperateBasal.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(412),
+    coolTemperateBasal.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(413),
+    coolTemperateBasal.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(414),
+    coolTemperateBasal.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(415),
+    coolTemperateBasal.multiply(chC.lte(2)).multiply(416),
     // Cool Temperate Subalpine
-    .add(coolTemperateSubalpine.multiply(chB.gt(5)).multiply(421))
-    .add(coolTemperateSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(422))
-    .add(coolTemperateSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(423))
-    .add(coolTemperateSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(424))
-    .add(coolTemperateSubalpine.multiply(chB.lte(2)).multiply(425))
+    coolTemperateSubalpine.multiply(chB.gt(5)).multiply(421),
+    coolTemperateSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(422),
+    coolTemperateSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(423),
+    coolTemperateSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(424),
+    coolTemperateSubalpine.multiply(chB.lte(2)).multiply(425),
     // Cool Temperate Alpine
-    .add(coolTemperateAlpine.multiply(chSP.gt(4)).multiply(431))
-    .add(coolTemperateAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(432))
-    .add(coolTemperateAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(433))
-    .add(coolTemperateAlpine.multiply(chSP.lte(2)).multiply(434))
+    coolTemperateAlpine.multiply(chSP.gt(4)).multiply(431),
+    coolTemperateAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(432),
+    coolTemperateAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(433),
+    coolTemperateAlpine.multiply(chSP.lte(2)).multiply(434),
     // Cool Temperate Nival
-    .add(coolTemperateNival.multiply(441))
+    coolTemperateNival.multiply(441),
     // Boreal Basal
-    .add(borealBasal.multiply(chB.gt(5)).multiply(511))
-    .add(borealBasal.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(512))
-    .add(borealBasal.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(513))
-    .add(borealBasal.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(514))
-    .add(borealBasal.multiply(chB.lte(2)).multiply(515))
+    borealBasal.multiply(chB.gt(5)).multiply(511),
+    borealBasal.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(512),
+    borealBasal.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(513),
+    borealBasal.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(514),
+    borealBasal.multiply(chB.lte(2)).multiply(515),
     // Boreal Alpine
-    .add(borealAlpine.multiply(chSP.gt(4)).multiply(521))
-    .add(borealAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(522))
-    .add(borealAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(523))
-    .add(borealAlpine.multiply(chSP.lte(2)).multiply(524))
+    borealAlpine.multiply(chSP.gt(4)).multiply(521),
+    borealAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(522),
+    borealAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(523),
+    borealAlpine.multiply(chSP.lte(2)).multiply(524),
     // Boreal Nival
-    .add(borealNival.multiply(531))
+    borealNival.multiply(531),
     // Subpolar Basal
-    .add(subpolarBasal.multiply(chSP.gt(4)).multiply(611))
-    .add(subpolarBasal.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(612))
-    .add(subpolarBasal.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(613))
-    .add(subpolarBasal.multiply(chSP.lte(2)).multiply(614))
+    subpolarBasal.multiply(chSP.gt(4)).multiply(611),
+    subpolarBasal.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(612),
+    subpolarBasal.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(613),
+    subpolarBasal.multiply(chSP.lte(2)).multiply(614),
     // Subpolar Nival
-    .add(subpolarNival.multiply(621))
+    subpolarNival.multiply(621),
     // Polar
-    .add(polarZone.multiply(711))
-  );
+    polarZone.multiply(711),
+  ];
+  return ee.ImageCollection.fromImages(
+    _parts.map(p => p.toInt16().rename('b'))
+  ).sum();
 }
 
 // ── Full HLZ classification (3-digit codes) ──────────────────────────────────

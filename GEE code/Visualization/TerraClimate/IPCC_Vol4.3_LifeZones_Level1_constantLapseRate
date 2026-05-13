@@ -199,258 +199,105 @@ var holdridgeLifeZones = function(startYear, endYear) {
   var chB  = ch(4);
   var chSP = ch(2);
 
-  // -- Belt × moisture class helper --
-  var tPM = function(belt, v) { return belt.multiply(chSW.gt(v-1).multiply(chSW.lte(v))); };
+  // -- Direct classification to the 27 IPCC GEZ codes --
+  //
+  // The HLZ→GEZ remap is fully determined by (altitudinal level, moisture
+  // class). Adjacent HLZ moisture buckets that map to the same GEZ class
+  // are merged into a single threshold. Each altitudinal level draws on a
+  // single moisture index (chT/chSW/chC/chB/chSP), so we group all belts
+  // sharing that level into one mutually-exclusive belt mask.
+  //
+  // Belt masks are 0/1 and pairwise disjoint, so .or() == .add(); using
+  // .add() avoids extra logical ops in the graph.
+  var beltGez1 = tropicalBasal;                                                     // chT
+  var beltGez2 = tropicalPremontane.add(subtropicalBasal);                          // chSW
+  var beltGez3 = tropicalLowerMontane.add(subtropicalLowerMontane)
+                                     .add(warmTemperateBasal);                     // chSW
+  var beltGez4 = tropicalMontane.add(subtropicalMontane)
+                                .add(warmTemperateMontane)
+                                .add(coolTemperateBasal);                          // chC
+  var beltGez5 = tropicalSubalpine.add(subtropicalSubalpine)
+                                  .add(warmTemperateSubalpine)
+                                  .add(coolTemperateSubalpine)
+                                  .add(borealBasal);                               // chB
+  var beltGez6 = tropicalAlpine.add(subtropicalAlpine)
+                               .add(warmTemperateAlpine)
+                               .add(coolTemperateAlpine)
+                               .add(borealAlpine)
+                               .add(subpolarBasal);                                // chSP
+  var beltGez7 = tropicalNival.add(subtropicalNival)
+                              .add(warmTemperateNival)
+                              .add(coolTemperateNival)
+                              .add(borealNival)
+                              .add(subpolarNival)
+                              .add(polarZone);                                     // single class
 
-  var lifeZones =
+  var parts = [
+    // ── GEZ 1x  (Tropical basal, chT) ────────────────────────────────
+    beltGez1.multiply(chT.gt(6)).multiply(11),
+    beltGez1.multiply(chT.gt(5).and(chT.lte(6))).multiply(12),
+    beltGez1.multiply(chT.gt(4).and(chT.lte(5))).multiply(13),
+    beltGez1.multiply(chT.gt(2).and(chT.lte(4))).multiply(14),
+    beltGez1.multiply(chT.lte(2)).multiply(15),
 
-    // ── TROPICAL BASAL ───────────────────────────────────────────────
-    tropicalBasal.multiply(chT.gt(8)).multiply(111)
-    .add(tropicalBasal.multiply(chT.gt(7).multiply(chT.lte(8))).multiply(112))
-    .add(tropicalBasal.multiply(chT.gt(6).multiply(chT.lte(7))).multiply(113))
-    .add(tropicalBasal.multiply(chT.gt(5).multiply(chT.lte(6))).multiply(114))
-    .add(tropicalBasal.multiply(chT.gt(4).multiply(chT.lte(5))).multiply(115))
-    .add(tropicalBasal.multiply(chT.gt(3).multiply(chT.lte(4))).multiply(116))
-    .add(tropicalBasal.multiply(chT.gt(2).multiply(chT.lte(3))).multiply(117))
-    .add(tropicalBasal.multiply(chT.lte(2)).multiply(118))
+    // ── GEZ 2x  (Subtropical, chSW) ──────────────────────────────────
+    beltGez2.multiply(chSW.gt(6)).multiply(21),
+    beltGez2.multiply(chSW.gt(5).and(chSW.lte(6))).multiply(22),
+    beltGez2.multiply(chSW.gt(4).and(chSW.lte(5))).multiply(23),
+    beltGez2.multiply(chSW.gt(2).and(chSW.lte(4))).multiply(24),
+    beltGez2.multiply(chSW.lte(2)).multiply(25),
 
-    // ── TROPICAL PREMONTANE ──────────────────────────────────────────
-    .add(tropicalPremontane.multiply(chSW.gt(7)).multiply(121))
-    .add(tPM(tropicalPremontane, 7).multiply(122))
-    .add(tPM(tropicalPremontane, 6).multiply(123))
-    .add(tPM(tropicalPremontane, 5).multiply(124))
-    .add(tPM(tropicalPremontane, 4).multiply(125))
-    .add(tPM(tropicalPremontane, 3).multiply(126))
-    .add(tropicalPremontane.multiply(chSW.lte(2)).multiply(127))
+    // ── GEZ 3x  (Warm Temperate, chSW) ───────────────────────────────
+    beltGez3.multiply(chSW.gt(6)).multiply(31),
+    beltGez3.multiply(chSW.gt(5).and(chSW.lte(6))).multiply(32),
+    beltGez3.multiply(chSW.gt(4).and(chSW.lte(5))).multiply(33),
+    beltGez3.multiply(chSW.gt(2).and(chSW.lte(4))).multiply(34),
+    beltGez3.multiply(chSW.lte(2)).multiply(35),
 
-    // ── TROPICAL LOWER MONTANE ───────────────────────────────────────
-    .add(tropicalLowerMontane.multiply(chSW.gt(7)).multiply(131))
-    .add(tPM(tropicalLowerMontane, 7).multiply(132))
-    .add(tPM(tropicalLowerMontane, 6).multiply(133))
-    .add(tPM(tropicalLowerMontane, 5).multiply(134))
-    .add(tPM(tropicalLowerMontane, 4).multiply(135))
-    .add(tPM(tropicalLowerMontane, 3).multiply(136))
-    .add(tropicalLowerMontane.multiply(chSW.lte(2)).multiply(137))
+    // ── GEZ 4x  (Cool Temperate, chC) ────────────────────────────────
+    beltGez4.multiply(chC.gt(5)).multiply(41),
+    beltGez4.multiply(chC.gt(4).and(chC.lte(5))).multiply(42),
+    beltGez4.multiply(chC.gt(2).and(chC.lte(4))).multiply(43),
+    beltGez4.multiply(chC.lte(2)).multiply(44),
 
-    // ── TROPICAL MONTANE ─────────────────────────────────────────────
-    .add(tropicalMontane.multiply(chC.gt(6)).multiply(141))
-    .add(tropicalMontane.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(142))
-    .add(tropicalMontane.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(143))
-    .add(tropicalMontane.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(144))
-    .add(tropicalMontane.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(145))
-    .add(tropicalMontane.multiply(chC.lte(2)).multiply(146))
+    // ── GEZ 5x  (Boreal, chB) ────────────────────────────────────────
+    beltGez5.multiply(chB.gt(4)).multiply(51),
+    beltGez5.multiply(chB.gt(3).and(chB.lte(4))).multiply(52),
+    beltGez5.multiply(chB.gt(2).and(chB.lte(3))).multiply(53),
+    beltGez5.multiply(chB.lte(2)).multiply(54),
 
-    // ── TROPICAL SUBALPINE ───────────────────────────────────────────
-    .add(tropicalSubalpine.multiply(chB.gt(5)).multiply(151))
-    .add(tropicalSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(152))
-    .add(tropicalSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(153))
-    .add(tropicalSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(154))
-    .add(tropicalSubalpine.multiply(chB.lte(2)).multiply(155))
+    // ── GEZ 6x  (Subpolar, chSP) ─────────────────────────────────────
+    beltGez6.multiply(chSP.gt(3)).multiply(61),
+    beltGez6.multiply(chSP.gt(2).and(chSP.lte(3))).multiply(62),
+    beltGez6.multiply(chSP.lte(2)).multiply(63),
 
-    // ── TROPICAL ALPINE ──────────────────────────────────────────────
-    .add(tropicalAlpine.multiply(chSP.gt(4)).multiply(161))
-    .add(tropicalAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(162))
-    .add(tropicalAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(163))
-    .add(tropicalAlpine.multiply(chSP.lte(2)).multiply(164))
+    // ── GEZ 71  (Polar / all nival belts) ────────────────────────────
+    beltGez7.multiply(71)
+  ];
 
-    // ── TROPICAL NIVAL ───────────────────────────────────────────────
-    .add(tropicalNival.multiply(171))
+  // Cast every part to a common type + band name so ImageCollection.sum()
+  // sees a homogeneous collection. Max possible value is 71, fits in Int16.
+  var castParts = parts.map(function(img) {
+    return img.toInt16().rename('b');
+  });
 
-    // ── SUBTROPICAL BASAL ────────────────────────────────────────────
-    .add(subtropicalBasal.multiply(chSW.gt(7)).multiply(211))
-    .add(tPM(subtropicalBasal, 7).multiply(212))
-    .add(tPM(subtropicalBasal, 6).multiply(213))
-    .add(tPM(subtropicalBasal, 5).multiply(214))
-    .add(tPM(subtropicalBasal, 4).multiply(215))
-    .add(tPM(subtropicalBasal, 3).multiply(216))
-    .add(subtropicalBasal.multiply(chSW.lte(2)).multiply(217))
-
-    // ── SUBTROPICAL LOWER MONTANE ────────────────────────────────────
-    .add(subtropicalLowerMontane.multiply(chSW.gt(7)).multiply(221))
-    .add(tPM(subtropicalLowerMontane, 7).multiply(222))
-    .add(tPM(subtropicalLowerMontane, 6).multiply(223))
-    .add(tPM(subtropicalLowerMontane, 5).multiply(224))
-    .add(tPM(subtropicalLowerMontane, 4).multiply(225))
-    .add(tPM(subtropicalLowerMontane, 3).multiply(226))
-    .add(subtropicalLowerMontane.multiply(chSW.lte(2)).multiply(227))
-
-    // ── SUBTROPICAL MONTANE ──────────────────────────────────────────
-    .add(subtropicalMontane.multiply(chC.gt(6)).multiply(231))
-    .add(subtropicalMontane.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(232))
-    .add(subtropicalMontane.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(233))
-    .add(subtropicalMontane.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(234))
-    .add(subtropicalMontane.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(235))
-    .add(subtropicalMontane.multiply(chC.lte(2)).multiply(236))
-
-    // ── SUBTROPICAL SUBALPINE ────────────────────────────────────────
-    .add(subtropicalSubalpine.multiply(chB.gt(5)).multiply(241))
-    .add(subtropicalSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(242))
-    .add(subtropicalSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(243))
-    .add(subtropicalSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(244))
-    .add(subtropicalSubalpine.multiply(chB.lte(2)).multiply(245))
-
-    // ── SUBTROPICAL ALPINE ───────────────────────────────────────────
-    .add(subtropicalAlpine.multiply(chSP.gt(4)).multiply(251))
-    .add(subtropicalAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(252))
-    .add(subtropicalAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(253))
-    .add(subtropicalAlpine.multiply(chSP.lte(2)).multiply(254))
-
-    // ── SUBTROPICAL NIVAL ────────────────────────────────────────────
-    .add(subtropicalNival.multiply(261))
-
-    // ── WARM TEMPERATE BASAL ─────────────────────────────────────────
-    .add(warmTemperateBasal.multiply(chSW.gt(7)).multiply(311))
-    .add(tPM(warmTemperateBasal, 7).multiply(312))
-    .add(tPM(warmTemperateBasal, 6).multiply(313))
-    .add(tPM(warmTemperateBasal, 5).multiply(314))
-    .add(tPM(warmTemperateBasal, 4).multiply(315))
-    .add(tPM(warmTemperateBasal, 3).multiply(316))
-    .add(warmTemperateBasal.multiply(chSW.lte(2)).multiply(317))
-
-    // ── WARM TEMPERATE MONTANE ───────────────────────────────────────
-    .add(warmTemperateMontane.multiply(chC.gt(6)).multiply(321))
-    .add(warmTemperateMontane.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(322))
-    .add(warmTemperateMontane.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(323))
-    .add(warmTemperateMontane.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(324))
-    .add(warmTemperateMontane.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(325))
-    .add(warmTemperateMontane.multiply(chC.lte(2)).multiply(326))
-
-    // ── WARM TEMPERATE SUBALPINE ─────────────────────────────────────
-    .add(warmTemperateSubalpine.multiply(chB.gt(5)).multiply(331))
-    .add(warmTemperateSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(332))
-    .add(warmTemperateSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(333))
-    .add(warmTemperateSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(334))
-    .add(warmTemperateSubalpine.multiply(chB.lte(2)).multiply(335))
-
-    // ── WARM TEMPERATE ALPINE ────────────────────────────────────────
-    .add(warmTemperateAlpine.multiply(chSP.gt(4)).multiply(341))
-    .add(warmTemperateAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(342))
-    .add(warmTemperateAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(343))
-    .add(warmTemperateAlpine.multiply(chSP.lte(2)).multiply(344))
-
-    // ── WARM TEMPERATE NIVAL ─────────────────────────────────────────
-    .add(warmTemperateNival.multiply(351))
-
-    // ── COOL TEMPERATE BASAL ─────────────────────────────────────────
-    .add(coolTemperateBasal.multiply(chC.gt(6)).multiply(411))
-    .add(coolTemperateBasal.multiply(chC.gt(5).multiply(chC.lte(6))).multiply(412))
-    .add(coolTemperateBasal.multiply(chC.gt(4).multiply(chC.lte(5))).multiply(413))
-    .add(coolTemperateBasal.multiply(chC.gt(3).multiply(chC.lte(4))).multiply(414))
-    .add(coolTemperateBasal.multiply(chC.gt(2).multiply(chC.lte(3))).multiply(415))
-    .add(coolTemperateBasal.multiply(chC.lte(2)).multiply(416))
-
-    // ── COOL TEMPERATE SUBALPINE ─────────────────────────────────────
-    .add(coolTemperateSubalpine.multiply(chB.gt(5)).multiply(421))
-    .add(coolTemperateSubalpine.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(422))
-    .add(coolTemperateSubalpine.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(423))
-    .add(coolTemperateSubalpine.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(424))
-    .add(coolTemperateSubalpine.multiply(chB.lte(2)).multiply(425))
-
-    // ── COOL TEMPERATE ALPINE ────────────────────────────────────────
-    .add(coolTemperateAlpine.multiply(chSP.gt(4)).multiply(431))
-    .add(coolTemperateAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(432))
-    .add(coolTemperateAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(433))
-    .add(coolTemperateAlpine.multiply(chSP.lte(2)).multiply(434))
-
-    // ── COOL TEMPERATE NIVAL ─────────────────────────────────────────
-    .add(coolTemperateNival.multiply(441))
-
-    // ── BOREAL BASAL ─────────────────────────────────────────────────
-    .add(borealBasal.multiply(chB.gt(5)).multiply(511))
-    .add(borealBasal.multiply(chB.gt(4).multiply(chB.lte(5))).multiply(512))
-    .add(borealBasal.multiply(chB.gt(3).multiply(chB.lte(4))).multiply(513))
-    .add(borealBasal.multiply(chB.gt(2).multiply(chB.lte(3))).multiply(514))
-    .add(borealBasal.multiply(chB.lte(2)).multiply(515))
-
-    // ── BOREAL ALPINE ────────────────────────────────────────────────
-    .add(borealAlpine.multiply(chSP.gt(4)).multiply(521))
-    .add(borealAlpine.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(522))
-    .add(borealAlpine.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(523))
-    .add(borealAlpine.multiply(chSP.lte(2)).multiply(524))
-
-    // ── BOREAL NIVAL ─────────────────────────────────────────────────
-    .add(borealNival.multiply(531))
-
-    // ── SUBPOLAR BASAL ───────────────────────────────────────────────
-    .add(subpolarBasal.multiply(chSP.gt(4)).multiply(611))
-    .add(subpolarBasal.multiply(chSP.gt(3).multiply(chSP.lte(4))).multiply(612))
-    .add(subpolarBasal.multiply(chSP.gt(2).multiply(chSP.lte(3))).multiply(613))
-    .add(subpolarBasal.multiply(chSP.lte(2)).multiply(614))
-
-    // ── SUBPOLAR NIVAL ───────────────────────────────────────────────
-    .add(subpolarNival.multiply(621))
-
-    // ── POLAR ────────────────────────────────────────────────────────
-    .add(polarZone.multiply(711));
-
-  return lifeZones;
+  return ee.ImageCollection.fromImages(castParts).sum();
 };
 
 // =========================================================================
-// Remap HLZ → IPCC Global Ecological Zones (27 classes, 2-digit codes)
+// Public entry point — kept as `gez(...)` for compatibility with the rest
+// of the script. The HLZ→GEZ remap is now fused into the classification
+// above, so no separate .remap() step is needed.
 // =========================================================================
 var gez = function(startYear, endYear) {
-  return holdridgeLifeZones(startYear, endYear).remap([
-    111, 112, 113, 114, 115, 116, 117, 118,
-    121, 122, 123, 124, 125, 126, 127,
-    131, 132, 133, 134, 135, 136, 137,
-    141, 142, 143, 144, 145, 146,
-    151, 152, 153, 154, 155,
-    161, 162, 163, 164,
-    171,
-    211, 212, 213, 214, 215, 216, 217,
-    221, 222, 223, 224, 225, 226, 227,
-    231, 232, 233, 234, 235, 236,
-    241, 242, 243, 244, 245,
-    251, 252, 253, 254,
-    261,
-    311, 312, 313, 314, 315, 316, 317,
-    321, 322, 323, 324, 325, 326,
-    331, 332, 333, 334, 335,
-    341, 342, 343, 344,
-    351,
-    411, 412, 413, 414, 415, 416,
-    421, 422, 423, 424, 425,
-    431, 432, 433, 434,
-    441,
-    511, 512, 513, 514, 515,
-    521, 522, 523, 524,
-    531,
-    611, 612, 613, 614,
-    621,
-    711,
-  ],
-  [
-    11, 11, 11, 12, 13, 14, 14, 15,
-    21, 21, 22, 23, 24, 24, 25,
-    31, 31, 32, 33, 34, 34, 35,
-    41, 41, 42, 43, 43, 44,
-    51, 51, 52, 53, 54,
-    61, 61, 62, 63,
-    71,
-    21, 21, 22, 23, 24, 24, 25,
-    31, 31, 32, 33, 34, 34, 35,
-    41, 41, 42, 43, 43, 44,
-    51, 51, 52, 53, 54,
-    61, 61, 62, 63,
-    71,
-    31, 31, 32, 33, 34, 34, 35,
-    41, 41, 42, 43, 43, 44,
-    51, 51, 52, 53, 54,
-    61, 61, 62, 63,
-    71,
-    41, 41, 42, 43, 43, 44,
-    51, 51, 52, 53, 54,
-    61, 61, 62, 63,
-    71,
-    51, 51, 52, 53, 54,
-    61, 61, 62, 63,
-    71,
-    61, 61, 62, 63,
-    71,
-    71,
-  ]);
+  return holdridgeLifeZones(startYear, endYear);
 };
+
+// =========================================================================
+// Build the GEZ image ONCE and reuse for the map layer and both exports.
+// (Calling gez() three times re-runs the whole computation graph each time.)
+// =========================================================================
+var gezImage = gez(START_YEAR, END_YEAR);
 
 // =========================================================================
 // Visualization
@@ -489,7 +336,7 @@ var sld_intervals =
 '</RasterSymbolizer>';
 
 Map.addLayer(
-  gez(START_YEAR, END_YEAR).sldStyle(sld_intervals),
+  gezImage.sldStyle(sld_intervals),
   {},
   'IPCC GEZ (HLZ Level 1) - TerraClimate ' + START_YEAR + '-' + END_YEAR
 );
@@ -542,7 +389,7 @@ Map.add(legend);
 // Export
 // =========================================================================
 Export.image.toDrive({
-  image: gez(START_YEAR, END_YEAR),
+  image: gezImage,
   description: 'IPCC_GEZ_HLZ_Level1_TerraClimate_' + START_YEAR + '-' + END_YEAR,
   scale: 1000,
   fileFormat: 'GeoTIFF',
@@ -550,7 +397,7 @@ Export.image.toDrive({
 });
 
 Export.image.toAsset({
-  image: gez(START_YEAR, END_YEAR),
+  image: gezImage,
   description: 'HoldridgeLifeZones/IPCC_GEZ_HLZ_Level1_TerraClimate_' + START_YEAR + '-' + END_YEAR,
   scale: 1000,
   maxPixels: 1e13

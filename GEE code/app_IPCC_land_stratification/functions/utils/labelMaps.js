@@ -221,7 +221,8 @@ const labelMap_soil = {
   5: 'Volcanic soils',
   6: 'Wetland soils',
   7: 'Organic',
-  8: 'Water'
+  8: 'Glacier',
+  9: 'Water'
 };
 
 /**

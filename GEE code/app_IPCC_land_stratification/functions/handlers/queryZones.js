@@ -79,7 +79,7 @@ async function queryZones(lon, lat, dataset = 'cru') {
 
   // ── Soil query (shared for both datasets) ──────────────────────────────────
   const soil = ee.Image('projects/ee-maidiesinitam/assets/soilTypes/ipccFromHWSD2')
-    .remap([1,2,3,4,5,6,7,8,9,10,11,12,13],[7,1,2,8,7,4,8,3,8,5,6,8,8]);
+    .remap([1,2,3,4,5,6,7,8,9,10,11,12,13],[8,1,2,9,7,4,9,3,9,5,6,9,9]);
 
   const soilResultPromise = new Promise((resolve, reject) => {
     soil.reduceRegion({

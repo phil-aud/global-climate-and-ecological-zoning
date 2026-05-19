@@ -21,10 +21,7 @@ const GCZ_COLORS = {
   10: '#d7ffe8',
 };
 
-function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, onError, bioData, dataset, onGczStatsUpdate }) {
-  const minYear = dataset === 'terraclimate' ? 1958 : 1901;
-  const [startYear, setStartYear] = useState(1995);
-  const [endYear, setEndYear] = useState(2024);
+function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, onError, bioData, dataset, startYear, endYear, onGczStatsUpdate }) {
   const [annualSummary, setAnnualSummary] = useState(null);
   const [monthlyData, setMonthlyData] = useState(null);
   const [gczStats, setGczStats] = useState(null);
@@ -38,10 +35,10 @@ function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, o
   // Generation counter: incremented on every new fetch; used to discard stale responses
   const fetchGen = useRef(0);
 
-  // Reset year range min when dataset changes (clamp startYear if needed)
-  // Also clear stale local state immediately so the old dataset's data doesn't persist
+  // Clear stale local state when dataset changes so the previous dataset's
+  // data doesn't briefly persist. The year range itself is owned by App.jsx
+  // (top-level "Select year range" control) and passed in as props.
   useEffect(() => {
-    if (startYear < minYear) setStartYear(minYear);
     setAnnualSummary(null);
     setMonthlyData(null);
     setGczStats(null);
@@ -156,6 +153,7 @@ function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, o
                 <th>Median (°C)</th>
                 <th>Min (°C)</th>
                 <th>Max (°C)</th>
+                <th>Std (°C)</th>
               </tr>
             </thead>
             <tbody>
@@ -171,6 +169,7 @@ function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, o
                   <td>{r.median ?? '—'}</td>
                   <td>{r.min ?? '—'}</td>
                   <td>{r.max ?? '—'}</td>
+                  <td>{r.std ?? '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -188,6 +187,7 @@ function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, o
                     <th>Median (°C)</th>
                     <th>Min (°C)</th>
                     <th>Max (°C)</th>
+                    <th>Std (°C)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -203,6 +203,7 @@ function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, o
                       <td>{r.median ?? '—'}</td>
                       <td>{r.min ?? '—'}</td>
                       <td>{r.max ?? '—'}</td>
+                      <td>{r.std ?? '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -213,28 +214,6 @@ function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, o
       </div>
 
       <div className="climate-point-card">
-      <div className="climate-inputs">
-        <label>
-          Start:
-          <input
-            type="number"
-            min={minYear}
-            max={endYear}
-            value={startYear}
-            onChange={(e) => setStartYear(e.target.value)}
-          />
-        </label>
-        <label>
-          End:
-          <input
-            type="number"
-            min={startYear}
-            max={new Date().getFullYear()}
-            value={endYear}
-            onChange={(e) => setEndYear(e.target.value)}
-          />
-        </label>
-      </div>
 
       {loading && <div className="loading">Loading climate data...</div>}
 

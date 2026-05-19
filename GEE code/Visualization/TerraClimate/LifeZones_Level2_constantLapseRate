@@ -565,9 +565,17 @@ Map.add(legend);
 // =========================================================================
 // Export
 // =========================================================================
+Export.image.toDrive({
+  image: lv2HLZ(START_YEAR, END_YEAR),
+  description: 'HLZ_Level2_TerraClimate_' + START_YEAR + '-' + END_YEAR,
+  scale: 927,
+  fileFormat: 'GeoTIFF',
+  maxPixels: 9e9
+});
+
 Export.image.toAsset({
   image: lv2HLZ(START_YEAR, END_YEAR),
   description: 'HLZ_Level2_TerraClimate_' + START_YEAR + '-' + END_YEAR,
-  scale: 1000,
+  scale: 927,
   maxPixels: 9e9
 });

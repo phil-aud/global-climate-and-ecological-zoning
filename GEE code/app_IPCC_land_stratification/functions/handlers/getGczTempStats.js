@@ -1,10 +1,10 @@
 /**
  * getGczTempStats handler
  *
- * For each Global Climate Zone (GCZ, 1..10) computes the median, minimum and
- * maximum mean annual temperature (MAT, °C) over the reference period
- * 1995–2024, using the precomputed GCZ asset and the corresponding
- * temperature dataset (CRU TS 4.09 or TerraClimate).
+ * For each Global Climate Zone (GCZ, 1..10) computes the median, minimum,
+ * maximum and standard deviation of the mean annual temperature (MAT, °C)
+ * over the reference period 1995–2024, using the precomputed GCZ asset and
+ * the corresponding temperature dataset (CRU TS 4.09 or TerraClimate).
  *
  * NOTE: this returns *temperature* (mean annual T), not biotemperature.
  *
@@ -12,7 +12,7 @@
  * are global static images so the table never changes.
  *
  * GET /getGczTempStats?dataset=cru|terraclimate
- * Response: { dataset, period: '1995-2024', rows: [{zone, label, median, min, max}, ...] }
+ * Response: { dataset, period: '1995-2024', rows: [{zone, label, median, min, max, std}, ...] }
  */
 
 const ee = require('@google/earthengine');
@@ -35,8 +35,8 @@ const GCZ_LABELS = {
 };
 
 const GCZ_ASSETS = {
-  cru:          'projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GlobalClimateZones_1995-2024_CRU409_final',
-  terraclimate: 'projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GlobalClimateZones_1995-2024_TerraClimate',
+  cru:          'projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCCversions/IPCC_GlobalClimateZones_1995-2024_CRU409',
+  terraclimate: 'projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCCversions/IPCC_GlobalClimateZones_1995-2024_TerraClimate',
 };
 
 const CRU_TMP_ASSET   = 'projects/ee-philaudebert/assets/CRU/CRU409_1901-2024/cru_ts409_1901-2024_tmp';
@@ -76,7 +76,8 @@ function computeStats(dataset) {
   const stack = matImage.addBands(gcz);
 
   const reducer = ee.Reducer.percentile([50], ['p50'])
-    .combine({ reducer2: ee.Reducer.minMax(), sharedInputs: true })
+    .combine({ reducer2: ee.Reducer.minMax(),  sharedInputs: true })
+    .combine({ reducer2: ee.Reducer.stdDev(),  sharedInputs: true })
     .group({ groupField: 1, groupName: 'zone' });
 
   // Native scale of the underlying climate dataset.
@@ -107,6 +108,7 @@ function computeStats(dataset) {
           median: g.p50 != null ? Number(g.p50.toFixed(2)) : null,
           min:    g.min != null ? Number(g.min.toFixed(2)) : null,
           max:    g.max != null ? Number(g.max.toFixed(2)) : null,
+          std:    g.stdDev != null ? Number(g.stdDev.toFixed(2)) : null,
         }))
         .sort((a, b) => a.zone - b.zone);
       resolve(rows);

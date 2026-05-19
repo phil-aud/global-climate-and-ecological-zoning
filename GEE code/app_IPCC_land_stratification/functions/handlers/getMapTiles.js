@@ -405,7 +405,7 @@ const SLD_HLZIII_PATTERN =
     '</ColorMap>' +
   '</RasterSymbolizer>';
 
-// Soil SLD for remapped classes 1..8
+// Soil SLD for remapped classes 1..9
 const SLD_SOIL =
   '<RasterSymbolizer>' +
     '<ColorMap type="intervals" extended="false">' +
@@ -416,7 +416,8 @@ const SLD_SOIL =
       '<ColorMapEntry color="#0083A8" quantity="5" label="Volcanic soils"/>' +
       '<ColorMapEntry color="#8303A7" quantity="6" label="Wetland soils"/>' +
       '<ColorMapEntry color="#2A7200" quantity="7" label="Organic"/>' +
-      '<ColorMapEntry color="#BDE7FF" quantity="8" label="Water"/>' +
+      '<ColorMapEntry color="#E0E0E0" quantity="8" label="Glacier"/>' +
+      '<ColorMapEntry color="#BDE7FF" quantity="9" label="Water"/>' +
     '</ColorMap>' +
   '</RasterSymbolizer>';
 
@@ -428,16 +429,16 @@ const SLD_SOIL =
 // is much faster than recomputing the HLZ classification on-the-fly.
 const ASSETS = {
   cru: {
-    gcz:    'projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GlobalClimateZones_1995-2024_CRU409_final',
-    gez:    'projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GEZ_HLZ_Level1_CRU409_1995-2024_final',
-    hlzII:  'projects/ee-philaudebert/assets/HoldridgeLifeZones/HLZ_Level2_CRU409_1995-2024_final',
-    hlzIII: 'projects/ee-philaudebert/assets/HoldridgeLifeZones/HoldridgeLifeZones_Level3_CRU409_1995-2024_final',
+    gcz:    'projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCCversions/IPCC_GlobalClimateZones_1995-2024_CRU409',
+    gez:    'projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCCversions/IPCC_GEZ_HLZ_Level1_CRU409_1995-2024',
+    hlzII:  'projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCCversions/HLZ_Level2_CRU409_1995-2024',
+    hlzIII: 'projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCCversions/HLZ_Level3_CRU409_1995-2024',
   },
   terraclimate: {
-    gcz:    'projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GlobalClimateZones_1995-2024_TerraClimate',
-    gez:    'projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GEZ_HLZ_Level1_TerraClimate_1995-2024',
-    hlzII:  'projects/ee-philaudebert/assets/HoldridgeLifeZones/HLZ_Level2_TerraClimate_1995-2024',
-    hlzIII: 'projects/ee-philaudebert/assets/HoldridgeLifeZones/HoldridgeLifeZones_Level3_TerraClimate_1995-2024',
+    gcz:    'projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCCversions/IPCC_GlobalClimateZones_1995-2024_TerraClimate',
+    gez:    'projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCCversions/IPCC_GEZ_HLZ_Level1_TerraClimate_1995-2024',
+    hlzII:  'projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCCversions/HLZ_Level2_TerraClimate_1995-2024',
+    hlzIII: 'projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCCversions/HLZ_Level3_TerraClimate_1995-2024',
   },
   soil:  'projects/ee-maidiesinitam/assets/soilTypes/ipccFromHWSD2',
 };
@@ -497,7 +498,7 @@ function layerCacheKey(layer, dataset, startYear, endYear) {
 function buildLayerImage(ee, layer, dataset, startYear, endYear) {
   if (layer === 'soil') {
     const soilImage = ee.Image(ASSETS.soil)
-      .remap([1,2,3,4,5,6,7,8,9,10,11,12,13],[7,1,2,8,7,4,8,3,8,5,6,8,8]);
+      .remap([1,2,3,4,5,6,7,8,9,10,11,12,13],[8,1,2,9,7,4,9,3,9,5,6,9,9]);
     return soilImage.sldStyle(SLD_SOIL);
   }
 

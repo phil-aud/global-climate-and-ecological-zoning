@@ -10,7 +10,7 @@ var cruTsPet = ee.Image("projects/ee-philaudebert/assets/CRU/CRU409_1901-2024/cr
 var elevation = ee.Image("USGS/GTOPO30").rename('elevation').select('elevation');
 var mon;
 var soil = ee.Image("projects/ee-maidiesinitam/assets/soilTypes/ipccFromHWSD2").remap(
-  [1,2,3,4,5,6,7,8,9,10,11,12,13],[7,1,2,8,7,4,8,3,8,5,6,8,8]);
+  [1,2,3,4,5,6,7,8,9,10,11,12,13],[8,1,2,9,7,4,9,3,9,5,6,9,9]);
 var yr;
 var thirtyY;
 
@@ -242,7 +242,7 @@ var labelMap_gcz = {
   10: 'Polar'
 };
 
-// Soil label map for remapped soil classes (1-8)
+// Soil label map for remapped soil classes (1-9)
 var labelMap_soil = {
   1: 'HAC',
   2: 'LAC',
@@ -251,7 +251,8 @@ var labelMap_soil = {
   5: 'Volcanic soils',
   6: 'Wetland soils',
   7: 'Organic',
-  8: 'Water'
+  8: 'Glacier',
+  9: 'Water'
 };
 
 
@@ -461,10 +462,10 @@ Map.addLayer(styled_hlzII, {}, 'Holdridge Life Zones - Level II');
 Map.addLayer(styled_gez, {}, 'Global Ecological Zones (GEZ, Holdridge Life Zones - Level I)');
 Map.addLayer(styled_gcz, {}, 'Global Climate Zones (GCZ)');
 
-// Visualization parameters for soil (classes 1–8)
+// Visualization parameters for soil (classes 1–9)
 var vis = {
   min: 1,
-  max: 8,
+  max: 9,
   palette: [
     '#A66F03', // 1 HAC
     '#FFD27F', // 2 LAC
@@ -473,7 +474,8 @@ var vis = {
     '#0083A8', // 5 Volcanic soils
     '#8303A7', // 6 Wetland soils
     '#2A7200', // 7 Organic
-    '#BDE7FF', // 8 Water
+    '#E0E0E0', // 8 Glacier
+    '#BDE7FF', // 9 Water
   ]
 };
 
@@ -1487,7 +1489,7 @@ function createLegendSoil() {
 
   var palette = vis.palette;
   var names = [
-    'HAC', 'LAC', 'Sandy soils', 'Spodic', 'Volcanic soils', 'Wetland soils', 'Organic', 'Water'
+    'HAC', 'LAC', 'Sandy soils', 'Spodic', 'Volcanic soils', 'Wetland soils', 'Organic', 'Glacier', 'Water'
   ];
 
   for (var i = 0; i < palette.length; i++) {

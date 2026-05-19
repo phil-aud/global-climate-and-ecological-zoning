@@ -516,14 +516,14 @@ Map.add(legend);
 Export.image.toDrive({
   image: ipccClimateZones(START_YEAR, END_YEAR),
   description: 'IPCC_GlobalClimateZones_' + START_YEAR + '-' + END_YEAR + '_TerraClimate',
-  scale: 1000,
+  scale: 927,
   fileFormat: 'GeoTIFF',
   maxPixels: 1e13
 });
 
 Export.image.toAsset({
   image: ipccClimateZones(START_YEAR, END_YEAR),
-  description: 'HoldridgeLifeZones/IPCC_GlobalClimateZones_' + START_YEAR + '-' + END_YEAR + '_TerraClimate',
-  scale: 1000,
+  description: 'IPCC_GlobalClimateZones_' + START_YEAR + '-' + END_YEAR + '_TerraClimate',
+  scale: 927,
   maxPixels: 1e13
 });

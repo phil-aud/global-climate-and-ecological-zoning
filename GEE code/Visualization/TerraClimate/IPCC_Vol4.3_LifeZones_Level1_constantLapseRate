@@ -396,14 +396,14 @@ Map.add(legend);
 Export.image.toDrive({
   image: gezImage,
   description: 'IPCC_GEZ_HLZ_Level1_TerraClimate_' + START_YEAR + '-' + END_YEAR,
-  scale: 1000,
+  scale: 927,
   fileFormat: 'GeoTIFF',
   maxPixels: 1e13
 });
 
 Export.image.toAsset({
   image: gezImage,
-  description: 'HoldridgeLifeZones/IPCC_GEZ_HLZ_Level1_TerraClimate_' + START_YEAR + '-' + END_YEAR,
-  scale: 1000,
+  description: 'IPCC_GEZ_HLZ_Level1_TerraClimate_' + START_YEAR + '-' + END_YEAR,
+  scale: 927,
   maxPixels: 1e13
 });

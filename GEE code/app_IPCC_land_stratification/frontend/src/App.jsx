@@ -346,6 +346,8 @@ function App() {
             onLoadingChange={setLoading}
             onError={setError}
             dataset={dataset}
+            startYear={tileStartYear}
+            endYear={tileEndYear}
             onGczStatsUpdate={setGczStats}
           />
         </div>

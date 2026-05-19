@@ -586,9 +586,17 @@ Map.add(legend);
 // =========================================================================
 // Export
 // =========================================================================
+Export.image.toDrive({
+  image: hlz,
+  description: 'HoldridgeLifeZones_Level3_CRU409_' + START_YEAR + '-' + END_YEAR,
+  scale: 927,
+  fileFormat: 'GeoTIFF',
+  maxPixels: 9e9
+});
+
 Export.image.toAsset({
   image: hlz,
   description: 'HoldridgeLifeZones_Level3_CRU409_' + START_YEAR + '-' + END_YEAR,
-  scale: 1000,
+  scale: 927,
   maxPixels: 9e9
 });

@@ -76,7 +76,8 @@ function computeStats(dataset) {
   const stack = matImage.addBands(gcz);
 
   const reducer = ee.Reducer.percentile([50], ['p50'])
-    .combine({ reducer2: ee.Reducer.minMax(), sharedInputs: true })
+    .combine({ reducer2: ee.Reducer.minMax(),  sharedInputs: true })
+    .combine({ reducer2: ee.Reducer.stdDev(),  sharedInputs: true })
     .group({ groupField: 1, groupName: 'zone' });
 
   // Native scale of the underlying climate dataset.
@@ -107,6 +108,7 @@ function computeStats(dataset) {
           median: g.p50 != null ? Number(g.p50.toFixed(2)) : null,
           min:    g.min != null ? Number(g.min.toFixed(2)) : null,
           max:    g.max != null ? Number(g.max.toFixed(2)) : null,
+          std:    g.stdDev != null ? Number(g.stdDev.toFixed(2)) : null,
         }))
         .sort((a, b) => a.zone - b.zone);
       resolve(rows);

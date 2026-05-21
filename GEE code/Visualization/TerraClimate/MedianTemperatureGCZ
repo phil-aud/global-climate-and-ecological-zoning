@@ -22,7 +22,7 @@ var START_YEAR = 1995;
 var END_YEAR   = 2024;
 
 var tc  = ee.ImageCollection('IDAHO_EPSCOR/TERRACLIMATE');
-var gcz = ee.Image('projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GlobalClimateZones_1995-2024_TerraClimate');
+var gcz = ee.Image('projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCCversions/IPCC_GlobalClimateZones_1995-2024_TerraClimate');
 
 // GCZ class labels (1..10)
 var GCZ_LABELS = {

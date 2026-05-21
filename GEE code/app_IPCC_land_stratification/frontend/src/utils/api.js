@@ -214,4 +214,21 @@ export async function getGczTempStats(dataset = 'cru') {
   }
 }
 
+/**
+ * Get per-GCZ monthly-mean temperature statistics (median + std) for each
+ * calendar month over 1995–2024.
+ * Returns { dataset, period, months, rows: [{zone, label, months: [{median,std}x12]}, ...] }.
+ */
+export async function getGczMonthlyTempStats(dataset = 'cru') {
+  try {
+    const response = await apiClient.get('/getGczMonthlyTempStats', {
+      params: { dataset },
+      timeout: 180000,
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.error || 'Failed to get GCZ monthly temperature statistics');
+  }
+}
+
 export default apiClient;

@@ -9,6 +9,14 @@ const { tcMonthlyMeanTemp, tcMonthlyMeanPre, TC_MIN_YEAR: TC_MIN, TC_MAX_YEAR: T
 
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
+// median of a numeric array (nulls ignored). Returns null if empty.
+function median(arr) {
+  const v = arr.filter(x => x != null && Number.isFinite(x)).slice().sort((a, b) => a - b);
+  const n = v.length;
+  if (n === 0) return null;
+  return n % 2 ? v[(n - 1) >> 1] : (v[n / 2 - 1] + v[n / 2]) / 2;
+}
+
 /**
  * Get monthly climate data (averaged across specified year range)
  * @param {number} lon - Longitude
@@ -33,17 +41,38 @@ async function getMonthlyClimate(lon, lat, startYear, endYear, dataset = 'cru') 
 
     const point = ee.Geometry.Point([lon, lat]);
 
+    // ── Means (per calendar month) ─────────────────────────────────────────
     const monthlyTempIC = tcMonthlyMeanTemp(startYear, endYear);
     const monthlyPreIC  = tcMonthlyMeanPre(startYear, endYear);
-
-    // Build a single 24-band image (t0…t11, p0…p11) and do ONE reduceRegion call
-    // instead of 24 sequential GEE evaluate() calls (one per month per variable).
     const tempList = monthlyTempIC.toList(12);
     const preList  = monthlyPreIC.toList(12);
+
+    // ── Medians (per calendar month, across years) ────────────────────────
+    // Build per-calendar-month median images directly from the raw IC so we
+    // don't have to fetch every per-year value to the client.
+    const tcRawTemp = ee.ImageCollection(TC_COLLECTION)
+      .filter(ee.Filter.calendarRange(startYear, endYear, 'year'))
+      .map(img =>
+        img.select('tmmn').add(img.select('tmmx'))
+          .multiply(0.05).rename('tmp')
+          .copyProperties(img, ['system:time_start'])
+      );
+    const tcRawPre = ee.ImageCollection(TC_COLLECTION)
+      .filter(ee.Filter.calendarRange(startYear, endYear, 'year'))
+      .select(['pr']);
+
     const bandImgs = [];
     for (let m = 0; m < 12; m++) {
       bandImgs.push(ee.Image(tempList.get(m)).rename(`t${m}`));
       bandImgs.push(ee.Image(preList.get(m)).rename(`p${m}`));
+      bandImgs.push(
+        tcRawTemp.filter(ee.Filter.calendarRange(m + 1, m + 1, 'month'))
+          .reduce(ee.Reducer.percentile([50])).rename(`tmed${m}`)
+      );
+      bandImgs.push(
+        tcRawPre.filter(ee.Filter.calendarRange(m + 1, m + 1, 'month'))
+          .reduce(ee.Reducer.percentile([50])).rename(`pmed${m}`)
+      );
     }
     const combined = ee.Image.cat(bandImgs);
 
@@ -60,10 +89,13 @@ async function getMonthlyClimate(lon, lat, startYear, endYear, dataset = 'cru') 
 
     if (!result) throw new Error('No data available at this location for the specified years');
 
+    const round2 = v => v != null ? Number(Number(v).toFixed(2)) : null;
     return MONTH_NAMES.map((month, m) => ({
       month,
-      temperature:   result[`t${m}`] != null ? Number(Number(result[`t${m}`]).toFixed(2)) : null,
-      precipitation: result[`p${m}`] != null ? Number(Number(result[`p${m}`]).toFixed(2)) : null,
+      temperature:        round2(result[`t${m}`]),
+      precipitation:      round2(result[`p${m}`]),
+      temperatureMedian:  round2(result[`tmed${m}`]),
+      precipitationMedian:round2(result[`pmed${m}`]),
     }));
   }
 
@@ -112,23 +144,28 @@ async function getMonthlyClimate(lon, lat, startYear, endYear, dataset = 'cru') 
     });
   });
 
-  // Aggregate by month (average across all years)
+  // Aggregate by month (mean + median across all years)
   const monthlyAgg = {};
   for (let m = 0; m < 12; m++) {
-    let tempSum = 0;
-    let precipSum = 0;
+    const tVals = [];
+    const pVals = [];
     for (let y = 0; y < years; y++) {
       const idx = y * 12 + m;
-      const bandNameTemp = `b${startIdx + idx + 1}`;
-      const bandNamePrecip = `b${startIdx + idx + 1}`;
-
-      tempSum += (tempData.properties[bandNameTemp] || 0);
-      precipSum += (precipData.properties[bandNamePrecip] || 0);
+      const bandName = `b${startIdx + idx + 1}`;
+      const tv = tempData.properties[bandName];
+      const pv = precipData.properties[bandName];
+      if (tv != null) tVals.push(tv);
+      if (pv != null) pVals.push(pv);
     }
+    const tMean = tVals.length ? tVals.reduce((s, v) => s + v, 0) / tVals.length : null;
+    const pMean = pVals.length ? pVals.reduce((s, v) => s + v, 0) / pVals.length : null;
+    const round2 = v => v != null ? Number(v.toFixed(2)) : null;
     monthlyAgg[m] = {
       month: MONTH_NAMES[m],
-      temperature: Number((tempSum / years).toFixed(2)),
-      precipitation: Number((precipSum / years).toFixed(2)),
+      temperature:         round2(tMean),
+      precipitation:       round2(pMean),
+      temperatureMedian:   round2(median(tVals)),
+      precipitationMedian: round2(median(pVals)),
     };
   }
 

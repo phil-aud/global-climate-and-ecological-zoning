@@ -988,6 +988,117 @@ body {
   margin-top: 14px;
 }
 
+/* ── Spacing between the two GCZ tables ──────────────────────────── */
+.gcz-monthly-stats-header {
+  margin-top: 22px;
+}
+
+/* Inline scroll wrapper around the compact monthly table */
+.gcz-monthly-stats-scroll {
+  overflow-x: auto;
+}
+
+/* Wider modal for the monthly GCZ table so all 12 months × 10 zones fit
+   on screen without horizontal scrolling on typical viewports. */
+.hlz-modal-content--monthly-table {
+  width: min(1600px, 98vw);
+  max-width: 98vw;
+  max-height: 92vh;
+}
+.hlz-modal-content--monthly-table .gcz-monthly-stats-scroll {
+  overflow-x: auto;
+  max-height: calc(92vh - 80px);
+}
+/* Override the generic enlarged-modal styles for this table — the 12-month
+   table needs to stay compact to fit on screen. */
+.hlz-modal-content--monthly-table .gcz-stats-table {
+  font-size: 13px;
+}
+.hlz-modal-content--monthly-table .gcz-stats-table th,
+.hlz-modal-content--monthly-table .gcz-stats-table td {
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+.hlz-modal-content--monthly-table .gcz-stats-table thead th {
+  font-size: 11px;
+}
+
+/* Inline (non-modal) compact rendering for the monthly table */
+.gcz-monthly-stats-table {
+  font-size: 10px;
+}
+.gcz-monthly-stats-table th,
+.gcz-monthly-stats-table td {
+  padding: 4px 6px;
+  white-space: nowrap;
+}
+
+/* ── Climatic information for selected point ─────────────────────── */
+.climate-point-title {
+  margin-bottom: 8px;
+}
+
+.annual-summary--grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  margin: 4px 0 6px;
+}
+.annual-stat {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.annual-stat-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-light);
+}
+.annual-stat-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-mid);
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Per-GCZ median monthly chart with zone selector ─────────────── */
+.gcz-monthly-median-chart {
+  margin-top: 16px;
+}
+.gcz-monthly-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.gcz-zone-select-label {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-mid);
+  font-weight: 600;
+}
+.gcz-zone-select {
+  font-size: 12px;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text-mid);
+}
+.gcz-monthly-median-chart-canvas {
+  position: relative;
+  height: 240px;
+  margin-top: 6px;
+}
+
 /* ── Responsive ─────────────────────────────────────────── */
 @media (max-width: 768px) {
   .app-container { flex-direction: column; }

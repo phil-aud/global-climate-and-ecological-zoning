@@ -27,10 +27,10 @@ ChartJS.register(
   Legend
 );
 
-function Chart({ data }) {
+function Chart({ data, tempKey = 'temperature', precipKey = 'precipitation', title = 'Monthly temperature and precipitation data for specified time band' }) {
   const labels = data.map((d) => d.month);
-  const temperatures = data.map((d) => d.temperature);
-  const precipitations = data.map((d) => d.precipitation);
+  const temperatures = data.map((d) => d[tempKey]);
+  const precipitations = data.map((d) => d[precipKey]);
 
   const chartData = {
     labels,
@@ -70,7 +70,7 @@ function Chart({ data }) {
     plugins: {
       title: {
         display: true,
-        text: 'Monthly temperature and precipitation data for specified time band',
+        text: title,
         font: { size: 13, weight: 'bold' },
         color: '#333',
       },

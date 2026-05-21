@@ -488,6 +488,16 @@ function hexToRgba(hex, alpha) {
  * shaded band) for a single user-selected Global Climate Zone.
  */
 function GczMonthlyMedianChart({ rows, selectedZone, onSelectZone }) {
+  const [expanded, setExpanded] = useState(false);
+
+  // Close on Escape while modal is open
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (e) => { if (e.key === 'Escape') setExpanded(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [expanded]);
+
   const row = useMemo(
     () => rows.find((r) => r.zone === selectedZone) || rows[0],
     [rows, selectedZone]
@@ -639,22 +649,42 @@ function GczMonthlyMedianChart({ rows, selectedZone, onSelectZone }) {
     <div className="gcz-monthly-median-chart">
       <div className="pyramid-subsection-header gcz-monthly-chart-header">
         <span className="pyramid-subsection-title">Median monthly temperature by climate zone</span>
-        <label className="gcz-zone-select-label">
-          Climate zone:&nbsp;
-          <select
-            className="gcz-zone-select"
-            value={row.zone}
-            onChange={(e) => onSelectZone(Number(e.target.value))}
+        <div className="gcz-monthly-chart-controls">
+          <label className="gcz-zone-select-label">
+            Climate zone:&nbsp;
+            <select
+              className="gcz-zone-select"
+              value={row.zone}
+              onChange={(e) => onSelectZone(Number(e.target.value))}
+            >
+              {rows.map((r) => (
+                <option key={r.zone} value={r.zone}>{r.label}</option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="hlz-maximize-btn"
+            onClick={() => setExpanded(true)}
+            title="Maximise"
+            aria-label="Maximise chart"
           >
-            {rows.map((r) => (
-              <option key={r.zone} value={r.zone}>{r.label}</option>
-            ))}
-          </select>
-        </label>
+            &#x26F6;
+          </button>
+        </div>
       </div>
       <div className="gcz-monthly-median-chart-canvas">
         <Line data={data} options={options} />
       </div>
+      {expanded && (
+        <div className="hlz-modal-backdrop" onClick={() => setExpanded(false)}>
+          <div className="hlz-modal-content hlz-modal-content--chart" onClick={(e) => e.stopPropagation()}>
+            <button className="hlz-modal-close" onClick={() => setExpanded(false)} aria-label="Close">✕</button>
+            <div className="gcz-monthly-median-chart-canvas gcz-monthly-median-chart-canvas--expanded">
+              <Line data={data} options={options} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

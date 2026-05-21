@@ -1078,6 +1078,11 @@ body {
   gap: 12px;
   flex-wrap: wrap;
 }
+.gcz-monthly-chart-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
 .gcz-zone-select-label {
   display: inline-flex;
   align-items: center;
@@ -1097,6 +1102,10 @@ body {
   position: relative;
   height: 240px;
   margin-top: 6px;
+}
+.gcz-monthly-median-chart-canvas--expanded {
+  height: 70vh;
+  width: 100%;
 }
 
 /* ── Responsive ─────────────────────────────────────────── */

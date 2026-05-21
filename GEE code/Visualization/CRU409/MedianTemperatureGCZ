@@ -25,7 +25,7 @@ var CRU_MIN_YEAR = 1901;
 
 // CRU TS 4.09 monthly temperature (°C) and precomputed GCZ asset
 var cruTmp = ee.Image('projects/ee-philaudebert/assets/CRU/CRU409_1901-2024/cru_ts409_1901-2024_tmp');
-var gcz    = ee.Image('projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCC_GlobalClimateZones_1995-2024_CRU409_final');
+var gcz    = ee.Image('projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCCversions/IPCC_GlobalClimateZones_1995-2024_CRU409');
 
 // GCZ class labels (1..10) — match the IPCC Vol4 Ch3 §3A.5.1 climate zones
 var GCZ_LABELS = {

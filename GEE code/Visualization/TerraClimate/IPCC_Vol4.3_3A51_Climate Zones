@@ -152,7 +152,7 @@ Export.image.toDrive({
 
 Export.image.toAsset({
   image: ipccClimateZones(1995, 2024),
-  description: 'HoldridgeLifeZones/IPCC_GlobalClimateZones_1995-2024_TerraClimate',
+  description: 'HoldridgeLifeZones/IPCCversions/IPCC_GlobalClimateZones_1995-2024_TerraClimate',
   scale: 1000,
   maxPixels: 1e13
 });

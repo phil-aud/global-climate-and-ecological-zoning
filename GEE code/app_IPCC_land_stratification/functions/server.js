@@ -16,6 +16,7 @@ const { getAnnualSummary } = require('./handlers/getAnnualSummary');
 const { getBioecologicalData } = require('./handlers/getBioecologicalData');
 const { getMapTiles } = require('./handlers/getMapTiles');
 const { getGczTempStats } = require('./handlers/getGczTempStats');
+const { getGczMonthlyTempStats } = require('./handlers/getGczMonthlyTempStats');
 
 const app = express();
 app.use(cors({
@@ -113,6 +114,18 @@ app.get(`${BASE}/getGczTempStats`, async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('getGczTempStats error:', err);
+    res.status(500).json({ error: err.message || 'Internal server error' });
+  }
+});
+
+app.get(`${BASE}/getGczMonthlyTempStats`, async (req, res) => {
+  try {
+    const dataset = (req.query && req.query.dataset) === 'terraclimate' ? 'terraclimate' : 'cru';
+    await ensureEEInitialized();
+    const result = await getGczMonthlyTempStats(dataset);
+    res.json(result);
+  } catch (err) {
+    console.error('getGczMonthlyTempStats error:', err);
     res.status(500).json({ error: err.message || 'Internal server error' });
   }
 });

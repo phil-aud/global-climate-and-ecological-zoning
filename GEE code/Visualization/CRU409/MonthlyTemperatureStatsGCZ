@@ -1,0 +1,116 @@
+/////////////////////////////////////////////////////////////////////////////
+//////////////// Monthly Temperature Stats per GCZ //////////////////////////
+/////////////////////////////////////////////////////////////////////////////
+//
+// Standalone GEE script — CRU TS 4.09
+// For each Global Climate Zone (GCZ, IPCC Vol4 Ch3 §3A.5.1) computes, for
+// every calendar month (Jan..Dec), the median and standard deviation of the
+// per-pixel "monthly mean temperature" (°C) over 1995–2024.
+//
+// The per-pixel monthly mean is the average of all Januaries (then all
+// Februaries, …) across the 30-year reference period. The median and stdDev
+// are then computed across all pixels falling within each GCZ.
+//
+// Inputs:
+//   • CRU TS 4.09 monthly mean temperature image (b1..b1488 → 1901-01..2024-12)
+//   • Precomputed GCZ image (1995–2024, CRU TS 4.09)
+//
+// Output: printed table {zone, label, jan..dec medians + stds} and CSV export.
+/////////////////////////////////////////////////////////////////////////////
+
+// ── Configuration ───────────────────────────────────────────────────────────
+var START_YEAR   = 1995;
+var END_YEAR     = 2024;
+var CRU_MIN_YEAR = 1901;
+
+var cruTmp = ee.Image('projects/ee-philaudebert/assets/CRU/CRU409_1901-2024/cru_ts409_1901-2024_tmp');
+var gcz    = ee.Image('projects/ee-philaudebert/assets/HoldridgeLifeZones/IPCCversions/IPCC_GlobalClimateZones_1995-2024_CRU409');
+
+var MONTH_NAMES = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+
+var GCZ_LABELS = {
+  1:  'Tropical Wet',
+  2:  'Tropical Moist',
+  3:  'Tropical Dry',
+  4:  'Warm Temperate Moist',
+  5:  'Warm Temperate Dry',
+  6:  'Cool Temperate Moist',
+  7:  'Cool Temperate Dry',
+  8:  'Boreal Moist',
+  9:  'Boreal Dry',
+  10: 'Polar'
+};
+
+// ── Build 12-band image (jan..dec) of per-pixel monthly mean T ─────────────
+var monthBands = [];
+for (var m = 1; m <= 12; m++) {
+  var monthBandNames = [];
+  for (var y = START_YEAR; y <= END_YEAR; y++) {
+    var idx = (y - CRU_MIN_YEAR) * 12 + (m - 1); // 0-based
+    monthBandNames.push('b' + (idx + 1));
+  }
+  monthBands.push(
+    cruTmp.select(monthBandNames).reduce(ee.Reducer.mean()).rename(MONTH_NAMES[m - 1])
+  );
+}
+var monthlyMean = ee.Image.cat(monthBands); // 12 bands jan..dec
+
+// ── Per-zone reduction ──────────────────────────────────────────────────────
+// Stack the 12 monthly bands + zone (group field index = 12).
+var stack = monthlyMean.addBands(gcz.rename('zone'));
+
+var perValueReducer = ee.Reducer.percentile([50], ['p50'])
+  .combine({reducer2: ee.Reducer.stdDev(), sharedInputs: true});
+
+var reducer = perValueReducer
+  .repeat(12)
+  .group({groupField: 12, groupName: 'zone'});
+
+var stats = stack.reduceRegion({
+  reducer: reducer,
+  geometry: ee.Geometry.Rectangle([-180, -60, 180, 85], null, false),
+  scale: 5566,           // ≈ 0.05°; CRU native is ~0.5°
+  maxPixels: 1e13,
+  bestEffort: true,
+  tileScale: 4
+});
+
+// ── Format as a FeatureCollection / table ──────────────────────────────────
+var groups = ee.List(stats.get('groups'));
+
+var rows = ee.FeatureCollection(groups.map(function (g) {
+  g = ee.Dictionary(g);
+  var zone = ee.Number(g.get('zone'));
+  var p50  = ee.List(g.get('p50'));
+  var std  = ee.List(g.get('stdDev'));
+
+  var props = ee.Dictionary({
+    zone:  zone,
+    label: ee.Dictionary(GCZ_LABELS).get(zone.format('%d'), 'Unknown')
+  });
+
+  // Add jan_median, jan_std, ..., dec_median, dec_std
+  for (var i = 0; i < 12; i++) {
+    var name = MONTH_NAMES[i];
+    var medVal = ee.Number(p50.get(i)).multiply(100).round().divide(100);
+    var stdVal = ee.Number(std.get(i)).multiply(100).round().divide(100);
+    props = props.set(name + '_median', medVal).set(name + '_std', stdVal);
+  }
+  return ee.Feature(null, props);
+}));
+
+print('CRU TS 4.09 — Monthly mean T (°C) per GCZ, 1995–2024 (median & stdDev)', rows);
+
+// CSV export — order columns explicitly
+var selectors = ['zone', 'label'];
+for (var k = 0; k < 12; k++) {
+  selectors.push(MONTH_NAMES[k] + '_median');
+  selectors.push(MONTH_NAMES[k] + '_std');
+}
+
+Export.table.toDrive({
+  collection:  rows,
+  description: 'MonthlyTemperatureStatsGCZ_CRU409_1995-2024',
+  fileFormat:  'CSV',
+  selectors:   selectors
+});

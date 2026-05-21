@@ -3,9 +3,16 @@
  * Displays climate data input controls and results
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { getAnnualSummary, getBioecologicalData, getMonthlyClimate, getGczTempStats } from '../utils/api';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Line } from 'react-chartjs-2';
+import { Chart as ChartJS, Filler } from 'chart.js';
+import { getAnnualSummary, getBioecologicalData, getMonthlyClimate, getGczTempStats, getGczMonthlyTempStats } from '../utils/api';
 import Chart from './Chart';
+
+// Filler is required for the shaded ±std band in GczMonthlyMedianChart.
+ChartJS.register(Filler);
+
+const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 // GCZ zone colours — match SLD_GCZ in getMapTiles.js
 const GCZ_COLORS = {
@@ -27,8 +34,14 @@ function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, o
   const [gczStats, setGczStats] = useState(null);
   const [gczStatsLoading, setGczStatsLoading] = useState(false);
   const [gczStatsError, setGczStatsError] = useState(null);
+  const [gczMonthlyStats, setGczMonthlyStats] = useState(null);
+  const [gczMonthlyStatsLoading, setGczMonthlyStatsLoading] = useState(false);
+  const [gczMonthlyStatsError, setGczMonthlyStatsError] = useState(null);
   const [chartExpanded, setChartExpanded] = useState(false);
+  const [chartMedianExpanded, setChartMedianExpanded] = useState(false);
   const [tableExpanded, setTableExpanded] = useState(false);
+  const [monthlyTableExpanded, setMonthlyTableExpanded] = useState(false);
+  const [selectedGczZone, setSelectedGczZone] = useState(1);
 
   // Track the years + dataset used for the last fetch so changes also trigger a refetch
   const lastFetch = useRef(null);
@@ -43,6 +56,8 @@ function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, o
     setMonthlyData(null);
     setGczStats(null);
     setGczStatsError(null);
+    setGczMonthlyStats(null);
+    setGczMonthlyStatsError(null);
     if (onGczStatsUpdate) onGczStatsUpdate(null);
   }, [dataset]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -69,6 +84,31 @@ function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, o
           if (!cancelled) setGczStatsLoading(false);
         });
     }, 1500);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [dataset]);
+
+  // Fetch per-GCZ monthly-mean temperature stats (median + std per calendar
+  // month) on mount/dataset change. Heavier than the annual table — delay a
+  // bit more so map tiles and the annual stats fire first.
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      setGczMonthlyStatsLoading(true);
+      setGczMonthlyStatsError(null);
+      getGczMonthlyTempStats(dataset)
+        .then((data) => {
+          if (cancelled) return;
+          setGczMonthlyStats(data);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          setGczMonthlyStatsError(err.message || 'Failed to load per-zone monthly temperature statistics');
+        })
+        .finally(() => {
+          if (!cancelled) setGczMonthlyStatsLoading(false);
+        });
+    }, 3000);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [dataset]);
 
@@ -113,11 +153,18 @@ function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, o
 
   // Close expanded modals on Escape key
   useEffect(() => {
-    if (!chartExpanded && !tableExpanded) return;
-    const onKey = (e) => { if (e.key === 'Escape') { setChartExpanded(false); setTableExpanded(false); } };
+    if (!chartExpanded && !chartMedianExpanded && !tableExpanded && !monthlyTableExpanded) return;
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        setChartExpanded(false);
+        setChartMedianExpanded(false);
+        setTableExpanded(false);
+        setMonthlyTableExpanded(false);
+      }
+    };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [chartExpanded, tableExpanded]);
+  }, [chartExpanded, chartMedianExpanded, tableExpanded, monthlyTableExpanded]);
 
   return (
     <div className="climate-panel">
@@ -211,25 +258,137 @@ function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, o
             </div>
           </div>
         )}
+
+        {/* Per-GCZ median monthly mean temperature (1995–2024).
+            Values shown as "median (std)" in °C. */}
+        <div className="pyramid-subsection-header gcz-monthly-stats-header">
+          <p className="gcz-stats-title" style={{ margin: 0 }}>
+            Median monthly mean temperature per Global Climate Zone <span className="gcz-stats-period">(1995–2024, °C — median (std))</span>
+          </p>
+          {gczMonthlyStats && gczMonthlyStats.rows && (
+            <button
+              className="hlz-maximize-btn"
+              onClick={() => setMonthlyTableExpanded(true)}
+              title="Maximise"
+              aria-label="Maximise monthly table"
+            >
+              &#x26F6;
+            </button>
+          )}
+        </div>
+        {gczMonthlyStatsLoading && <div className="loading">Loading per-zone monthly temperature…</div>}
+        {gczMonthlyStatsError && <div className="error-message">{gczMonthlyStatsError}</div>}
+        {gczMonthlyStats && gczMonthlyStats.rows && (
+          <div className="gcz-monthly-stats-scroll" style={{ overflowX: 'auto' }}>
+            <table className="gcz-stats-table gcz-monthly-stats-table">
+              <thead>
+                <tr>
+                  <th>Climate zone</th>
+                  {MONTH_LABELS.map((m) => <th key={m}>{m}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {gczMonthlyStats.rows.map((r) => (
+                  <tr key={r.zone}>
+                    <td>
+                      <span
+                        className="gcz-color-swatch"
+                        style={{ background: GCZ_COLORS[r.zone] ?? '#ccc' }}
+                      />
+                      {r.label}
+                    </td>
+                    {r.months.map((cell, i) => (
+                      <td key={i}>
+                        {cell && cell.median != null
+                          ? `${cell.median.toFixed(2)}${cell.std != null ? ` (${cell.std.toFixed(2)})` : ''}`
+                          : '—'}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {monthlyTableExpanded && gczMonthlyStats && gczMonthlyStats.rows && (
+          <div className="hlz-modal-backdrop" onClick={() => setMonthlyTableExpanded(false)}>
+            <div className="hlz-modal-content hlz-modal-content--monthly-table" onClick={e => e.stopPropagation()}>
+              <button className="hlz-modal-close" onClick={() => setMonthlyTableExpanded(false)} aria-label="Close">✕</button>
+              <p className="gcz-stats-title">Median monthly mean temperature per Global Climate Zone <span className="gcz-stats-period">(1995–2024, °C — median (std))</span></p>
+              <div className="gcz-monthly-stats-scroll">
+                <table className="gcz-stats-table gcz-monthly-stats-table">
+                  <thead>
+                    <tr>
+                      <th>Climate zone</th>
+                      {MONTH_LABELS.map((m) => <th key={m}>{m}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gczMonthlyStats.rows.map((r) => (
+                      <tr key={r.zone}>
+                        <td>
+                          <span
+                            className="gcz-color-swatch"
+                            style={{ background: GCZ_COLORS[r.zone] ?? '#ccc' }}
+                          />
+                          {r.label}
+                        </td>
+                        {r.months.map((cell, i) => (
+                          <td key={i}>
+                            {cell && cell.median != null
+                              ? `${cell.median.toFixed(2)}${cell.std != null ? ` (${cell.std.toFixed(2)})` : ''}`
+                              : '—'}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Median monthly mean temperature chart for a user-selected GCZ */}
+        {gczMonthlyStats && gczMonthlyStats.rows && gczMonthlyStats.rows.length > 0 && (
+          <GczMonthlyMedianChart
+            rows={gczMonthlyStats.rows}
+            selectedZone={selectedGczZone}
+            onSelectZone={setSelectedGczZone}
+          />
+        )}
       </div>
 
       <div className="climate-point-card">
+        <div className="panel-title climate-point-title">
+          <span className="tier-label subsubtitle">Climatic information for selected point</span>
+        </div>
 
       {loading && <div className="loading">Loading climate data...</div>}
 
-      <div className="annual-summary">
-        <p>
-          <strong>Mean annual temperature (MAT):</strong> {annualSummary?.meanAnnualTemp ?? '—'}°C
-        </p>
-        <p>
-          <strong>Mean annual precipitation (MAP):</strong> {annualSummary?.meanAnnualPrecip ?? '—'} mm
-        </p>
+      <div className="annual-summary annual-summary--grid">
+        <div className="annual-stat">
+          <span className="annual-stat-label">Mean annual temperature (MAT)</span>
+          <span className="annual-stat-value">{annualSummary?.meanAnnualTemp ?? '—'} °C</span>
+        </div>
+        <div className="annual-stat">
+          <span className="annual-stat-label">Median annual temperature</span>
+          <span className="annual-stat-value">{annualSummary?.medianAnnualTemp ?? '—'} °C</span>
+        </div>
+        <div className="annual-stat">
+          <span className="annual-stat-label">Mean annual precipitation (MAP)</span>
+          <span className="annual-stat-value">{annualSummary?.meanAnnualPrecip ?? '—'} mm</span>
+        </div>
+        <div className="annual-stat">
+          <span className="annual-stat-label">Median annual precipitation</span>
+          <span className="annual-stat-value">{annualSummary?.medianAnnualPrecip ?? '—'} mm</span>
+        </div>
       </div>
 
       {monthlyData && (
         <div className="monthly-chart-section">
           <div className="pyramid-subsection-header">
-            <span className="pyramid-subsection-title">Monthly climate chart</span>
+            <span className="pyramid-subsection-title">Monthly mean climate chart</span>
             <button
               className="hlz-maximize-btn"
               onClick={() => setChartExpanded(true)}
@@ -239,12 +398,57 @@ function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, o
               &#x26F6;
             </button>
           </div>
-          <Chart data={monthlyData} />
+          <Chart
+            data={monthlyData}
+            tempKey="temperature"
+            precipKey="precipitation"
+            title="Monthly mean temperature and precipitation"
+          />
           {chartExpanded && (
             <div className="hlz-modal-backdrop" onClick={() => setChartExpanded(false)}>
               <div className="hlz-modal-content hlz-modal-content--chart" onClick={e => e.stopPropagation()}>
                 <button className="hlz-modal-close" onClick={() => setChartExpanded(false)} aria-label="Close">✕</button>
-                <Chart data={monthlyData} />
+                <Chart
+                  data={monthlyData}
+                  tempKey="temperature"
+                  precipKey="precipitation"
+                  title="Monthly mean temperature and precipitation"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {monthlyData && monthlyData.some(d => d.temperatureMedian != null || d.precipitationMedian != null) && (
+        <div className="monthly-chart-section">
+          <div className="pyramid-subsection-header">
+            <span className="pyramid-subsection-title">Monthly median climate chart</span>
+            <button
+              className="hlz-maximize-btn"
+              onClick={() => setChartMedianExpanded(true)}
+              title="Maximise"
+              aria-label="Maximise median chart"
+            >
+              &#x26F6;
+            </button>
+          </div>
+          <Chart
+            data={monthlyData}
+            tempKey="temperatureMedian"
+            precipKey="precipitationMedian"
+            title="Monthly median temperature and precipitation"
+          />
+          {chartMedianExpanded && (
+            <div className="hlz-modal-backdrop" onClick={() => setChartMedianExpanded(false)}>
+              <div className="hlz-modal-content hlz-modal-content--chart" onClick={e => e.stopPropagation()}>
+                <button className="hlz-modal-close" onClick={() => setChartMedianExpanded(false)} aria-label="Close">✕</button>
+                <Chart
+                  data={monthlyData}
+                  tempKey="temperatureMedian"
+                  precipKey="precipitationMedian"
+                  title="Monthly median temperature and precipitation"
+                />
               </div>
             </div>
           )}
@@ -264,6 +468,192 @@ function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, o
           )}
           <li>USGS GTOPO30 Global Digital Elevation Model. U.S. Geological Survey, EROS Center.</li>
         </ul>
+      </div>
+    </div>
+  );
+}
+
+// Hex (#rrggbb) → rgba(r,g,b,a)
+function hexToRgba(hex, alpha) {
+  if (!hex) return `rgba(180,180,180,${alpha})`;
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/**
+ * Line chart showing the 12 calendar-month median temperatures (with ±1 std
+ * shaded band) for a single user-selected Global Climate Zone.
+ */
+function GczMonthlyMedianChart({ rows, selectedZone, onSelectZone }) {
+  const row = useMemo(
+    () => rows.find((r) => r.zone === selectedZone) || rows[0],
+    [rows, selectedZone]
+  );
+
+  // Shared y-axis range across all zones so curves are visually comparable
+  // (e.g. polar zones swing far more than tropical ones). Bounds are the
+  // global min(median−std) / max(median+std) over every zone × month,
+  // rounded outward to the nearest 10 °C.
+  const [yMin, yMax] = useMemo(() => {
+    let lo = Infinity, hi = -Infinity;
+    rows.forEach((r) => r.months.forEach((c) => {
+      if (!c || c.median == null) return;
+      const s = c.std != null ? c.std : 0;
+      lo = Math.min(lo, c.median - s);
+      hi = Math.max(hi, c.median + s);
+    }));
+    if (!isFinite(lo) || !isFinite(hi)) return [-40, 40];
+    return [Math.floor(lo / 10) * 10, Math.ceil(hi / 10) * 10];
+  }, [rows]);
+
+  const color = GCZ_COLORS[row.zone] ?? '#888';
+  const labels = MONTH_LABELS;
+  const median = row.months.map((c) => (c && c.median != null ? c.median : null));
+  const upper  = row.months.map((c) => (c && c.median != null && c.std != null ? c.median + c.std : null));
+  const lower  = row.months.map((c) => (c && c.median != null && c.std != null ? c.median - c.std : null));
+
+  // Dark outline drawn behind everything else so that even the palest IPCC
+  // colours (Polar, Tropical Dry, Boreal Dry, …) stand out against a white
+  // background while keeping the official zone colour identity intact.
+  const HALO = 'rgba(40, 40, 40, 0.85)';
+
+  const data = {
+    labels,
+    datasets: [
+      // ── Std-band halo (slightly larger dark outline behind the fill) ──
+      {
+        label: '+1 std outline',
+        data: upper,
+        borderColor: HALO,
+        borderWidth: 1,
+        borderDash: [3, 3],
+        pointRadius: 0,
+        fill: false,
+        tension: 0.25,
+        order: 4,
+      },
+      {
+        label: '−1 std outline',
+        data: lower,
+        borderColor: HALO,
+        borderWidth: 1,
+        borderDash: [3, 3],
+        pointRadius: 0,
+        fill: false,
+        tension: 0.25,
+        order: 4,
+      },
+      // ── Std band fill ──────────────────────────────────────────────
+      {
+        label: '+1 std',
+        data: upper,
+        borderColor: 'transparent',
+        pointRadius: 0,
+        fill: '+1', // fill to next dataset (lower)
+        backgroundColor: hexToRgba(color, 0.55),
+        tension: 0.25,
+        order: 3,
+      },
+      {
+        label: '−1 std',
+        data: lower,
+        borderColor: 'transparent',
+        pointRadius: 0,
+        fill: false,
+        tension: 0.25,
+        order: 3,
+      },
+      // ── Dark halo behind the median line ───────────────────────────
+      {
+        label: 'Median halo',
+        data: median,
+        borderColor: HALO,
+        backgroundColor: HALO,
+        borderWidth: 5,
+        pointRadius: 5,
+        pointBackgroundColor: HALO,
+        pointBorderWidth: 0,
+        tension: 0.25,
+        order: 2,
+      },
+      // ── Median line on top, in the official IPCC zone colour ───────
+      {
+        label: 'Median (°C)',
+        data: median,
+        borderColor: color,
+        backgroundColor: color,
+        borderWidth: 2.5,
+        pointRadius: 3,
+        pointBackgroundColor: color,
+        pointBorderColor: HALO,
+        pointBorderWidth: 1,
+        tension: 0.25,
+        order: 1,
+      },
+    ],
+  };
+
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: {
+        labels: {
+          filter: (item) => item.text === 'Median (°C)',
+        },
+      },
+      title: {
+        display: true,
+        text: `Median monthly mean temperature — ${row.label} (1995–2024)`,
+      },
+      tooltip: {
+        // Only show the Median dataset; suppresses the halo, ±std outline
+        // and band-fill series so the tooltip stays a single clean line.
+        filter: (item) => item.dataset.label === 'Median (°C)',
+        callbacks: {
+          label: (ctx) => {
+            const i = ctx.dataIndex;
+            const m = row.months[i];
+            if (!m || m.median == null) return 'No data';
+            const std = m.std != null ? ` ± ${m.std.toFixed(2)}` : '';
+            return `${m.median.toFixed(2)} °C${std}`;
+          },
+        },
+      },
+    },
+    scales: {
+      y: {
+        min: yMin,
+        max: yMax,
+        ticks: { stepSize: 10 },
+        title: { display: true, text: 'Temperature (°C)' },
+      },
+    },
+  };
+
+  return (
+    <div className="gcz-monthly-median-chart">
+      <div className="pyramid-subsection-header gcz-monthly-chart-header">
+        <span className="pyramid-subsection-title">Median monthly temperature by climate zone</span>
+        <label className="gcz-zone-select-label">
+          Climate zone:&nbsp;
+          <select
+            className="gcz-zone-select"
+            value={row.zone}
+            onChange={(e) => onSelectZone(Number(e.target.value))}
+          >
+            {rows.map((r) => (
+              <option key={r.zone} value={r.zone}>{r.label}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="gcz-monthly-median-chart-canvas">
+        <Line data={data} options={options} />
       </div>
     </div>
   );

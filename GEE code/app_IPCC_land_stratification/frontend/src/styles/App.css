@@ -875,6 +875,29 @@ body {
   margin-bottom: 6px;
 }
 
+/* Collapsible annual GCZ section (uses native <details>/<summary>) */
+.gcz-annual-details {
+  margin-bottom: 10px;
+}
+.gcz-annual-summary {
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  padding: 4px 0;
+}
+.gcz-annual-summary::-webkit-details-marker { display: none; }
+.gcz-annual-summary::before {
+  content: '\25B8'; /* right-pointing triangle */
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 11px;
+  color: var(--navy);
+  transition: transform 0.15s ease;
+}
+.gcz-annual-details[open] > .gcz-annual-summary::before {
+  transform: rotate(90deg);
+}
+
 .pyramid-subsection-title {
   font-size: 13px;
   font-weight: 700;

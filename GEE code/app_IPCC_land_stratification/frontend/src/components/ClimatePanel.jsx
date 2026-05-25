@@ -175,58 +175,60 @@ function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, o
 
       {/* Per-GCZ MAT statistics (1995–2024). Global table — same for all locations. */}
       <div className="gcz-stats">
-        <div className="pyramid-subsection-header">
-          <p className="gcz-stats-title" style={{ margin: 0 }}>
-            Median annual temperature per Global Climate Zone <span className="gcz-stats-period">(1995–2024)</span>
-          </p>
+        <details className="gcz-annual-details">
+          <summary className="pyramid-subsection-header gcz-annual-summary">
+            <p className="gcz-stats-title" style={{ margin: 0 }}>
+              Median mean annual temperature per Global Climate Zone <span className="gcz-stats-period">(1995–2024)</span>
+            </p>
+            {gczStats && gczStats.rows && (
+              <button
+                className="hlz-maximize-btn"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setTableExpanded(true); }}
+                title="Maximise"
+                aria-label="Maximise table"
+              >
+                &#x26F6;
+              </button>
+            )}
+          </summary>
+          {gczStatsLoading && <div className="loading">Loading per-zone temperature…</div>}
+          {gczStatsError && <div className="error-message">{gczStatsError}</div>}
           {gczStats && gczStats.rows && (
-            <button
-              className="hlz-maximize-btn"
-              onClick={() => setTableExpanded(true)}
-              title="Maximise"
-              aria-label="Maximise table"
-            >
-              &#x26F6;
-            </button>
-          )}
-        </div>
-        {gczStatsLoading && <div className="loading">Loading per-zone temperature…</div>}
-        {gczStatsError && <div className="error-message">{gczStatsError}</div>}
-        {gczStats && gczStats.rows && (
-          <table className="gcz-stats-table">
-            <thead>
-              <tr>
-                <th>Climate zone</th>
-                <th>Median (°C)</th>
-                <th>Min (°C)</th>
-                <th>Max (°C)</th>
-                <th>Std (°C)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {gczStats.rows.map((r) => (
-                <tr key={r.zone}>
-                  <td>
-                    <span
-                      className="gcz-color-swatch"
-                      style={{ background: GCZ_COLORS[r.zone] ?? '#ccc' }}
-                    />
-                    {r.label}
-                  </td>
-                  <td>{r.median ?? '—'}</td>
-                  <td>{r.min ?? '—'}</td>
-                  <td>{r.max ?? '—'}</td>
-                  <td>{r.std ?? '—'}</td>
+            <table className="gcz-stats-table">
+              <thead>
+                <tr>
+                  <th>Climate zone</th>
+                  <th>Median (°C)</th>
+                  <th>Min (°C)</th>
+                  <th>Max (°C)</th>
+                  <th>Std (°C)</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              </thead>
+              <tbody>
+                {gczStats.rows.map((r) => (
+                  <tr key={r.zone}>
+                    <td>
+                      <span
+                        className="gcz-color-swatch"
+                        style={{ background: GCZ_COLORS[r.zone] ?? '#ccc' }}
+                      />
+                      {r.label}
+                    </td>
+                    <td>{r.median ?? '—'}</td>
+                    <td>{r.min ?? '—'}</td>
+                    <td>{r.max ?? '—'}</td>
+                    <td>{r.std ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </details>
         {tableExpanded && gczStats && gczStats.rows && (
           <div className="hlz-modal-backdrop" onClick={() => setTableExpanded(false)}>
             <div className="hlz-modal-content" onClick={e => e.stopPropagation()}>
               <button className="hlz-modal-close" onClick={() => setTableExpanded(false)} aria-label="Close">✕</button>
-              <p className="gcz-stats-title">Median annual temperature per Global Climate Zone <span className="gcz-stats-period">(1995–2024)</span></p>
+              <p className="gcz-stats-title">Median mean annual temperature per Global Climate Zone <span className="gcz-stats-period">(1995–2024)</span></p>
               <table className="gcz-stats-table">
                 <thead>
                   <tr>
@@ -648,7 +650,7 @@ function GczMonthlyMedianChart({ rows, selectedZone, onSelectZone }) {
   return (
     <div className="gcz-monthly-median-chart">
       <div className="pyramid-subsection-header gcz-monthly-chart-header">
-        <span className="pyramid-subsection-title">Median monthly temperature by climate zone</span>
+        <span className="pyramid-subsection-title">Median monthly mean temperature per Global Climate Zone</span>
         <div className="gcz-monthly-chart-controls">
           <label className="gcz-zone-select-label">
             Climate zone:&nbsp;

@@ -78,8 +78,13 @@ function tileMaxNativeZoom(layer, dataset) {
 // `ThrottledTileLayer` is an `L.TileLayer` subclass that routes every tile's
 // `img.src` assignment through this queue instead of setting it directly.
 const geeTileQueue = (() => {
-  const MAX_CONCURRENT  = 2;    // max simultaneous GEE tile requests
-  const MIN_INTERVAL_MS = 300;  // minimum ms between consecutive dispatches (~3 req/s)
+  // GEE's tile endpoint enforces a fairly low per-token request rate. Empirically
+  // 2 concurrent + 300 ms (~3 req/s) is enough to trigger HTTP 429 bursts on a
+  // fresh map load, especially when the pattern overlay is active and doubles
+  // the request count for every visible HLZ III tile. 1 concurrent + 500 ms
+  // (~2 req/s) reliably stays under the quota without making panning feel slow.
+  const MAX_CONCURRENT  = 1;    // max simultaneous GEE tile requests
+  const MIN_INTERVAL_MS = 500;  // minimum ms between consecutive dispatches (~2 req/s)
   let active = 0;
   let nextAllowedAt = 0;        // earliest timestamp for the next dispatch
   let flushPending = false;     // prevents multiple concurrent setTimeout calls
@@ -148,9 +153,9 @@ const ThrottledTileLayer = L.TileLayer.extend({
 // threshold is reached it opens the circuit and defers ALL retry timeouts
 // until the break period has elapsed.
 const tileRetryManager = (() => {
-  const WINDOW_MS        = 5_000;   // sliding error-count window
-  const ERROR_THRESHOLD  = 6;       // errors in window → open circuit
-  const CIRCUIT_BREAK_MS = 45_000;  // pause duration after threshold (~45 s)
+  const WINDOW_MS        = 10_000;  // sliding error-count window
+  const ERROR_THRESHOLD  = 3;       // errors in window → open circuit (was 6 — too lax for 429 bursts)
+  const CIRCUIT_BREAK_MS = 60_000;  // pause duration after threshold (~60 s)
   let errorTimestamps = [];
   let pauseUntil = 0;
   return {
@@ -238,7 +243,7 @@ function ZoneTileLayer({ tileUrl, opacity, maxNativeZoom = 8 }) {
     // at 2 to avoid amplifying server-side problems (e.g. expired map IDs that
     // will never recover, or persistent 400s).
     const retryCounts = new WeakMap();
-    const HTTP_RETRY_MAX = 2;
+    const HTTP_RETRY_MAX = 1; // single retry — beyond this we're just amplifying 429s
     layerRef.current.on('tileerror', (e) => {
       const tileEl = e.tile;
       if (!tileEl) return;
@@ -255,45 +260,11 @@ function ZoneTileLayer({ tileUrl, opacity, maxNativeZoom = 8 }) {
       }, 2000 * tries); // 2 s, 4 s, 6 s — goes back through the rate-limited queue
     });
 
-    // Detect GEE cold-pipeline blank tiles (HTTP 200, transparent PNG).
-    // These never trigger tileerror, so we inspect each loaded tile by sampling
-    // its centre pixel via canvas. If alpha === 0 the tile is blank and we
-    // retry it individually — no setUrl, so other tiles are never disturbed.
-    //
-    // NOTE: at low zoom (≤3) most tiles legitimately contain large ocean
-    // expanses with no land data, so blank-retry generates pointless 400/429
-    // bursts. We skip blank-retry entirely below zoom 4, and cap to a single
-    // retry above that — cold-pipeline tiles almost always succeed on attempt 2.
-    const blankRetryCounts = new WeakMap();
-    const BLANK_RETRY_MAX = 1;
-    const BLANK_RETRY_MIN_ZOOM = 4;
-    layerRef.current.on('tileload', (e) => {
-      const tileEl = e.tile;
-      const originalSrc = tileOriginalUrls.get(tileEl);
-      if (!originalSrc || originalSrc.startsWith('data:')) return;
-      if ((blankRetryCounts.get(tileEl) || 0) >= BLANK_RETRY_MAX) return;
-      if ((e.coords && e.coords.z != null ? e.coords.z : map.getZoom()) < BLANK_RETRY_MIN_ZOOM) return;
-      try {
-        const check = document.createElement('canvas');
-        check.width = 1; check.height = 1;
-        const ctx = check.getContext('2d');
-        // Sample the centre pixel of the 256×256 tile
-        ctx.drawImage(tileEl, 128, 128, 1, 1, 0, 0, 1, 1);
-        const alpha = ctx.getImageData(0, 0, 1, 1).data[3];
-        if (alpha > 0) return; // tile has real data — nothing to do
-      } catch (_) {
-        return; // CORS / tainted-canvas error — can't check, leave tile as-is
-      }
-      // Tile is fully transparent → GEE pipeline was cold. Schedule a retry.
-      const tries = (blankRetryCounts.get(tileEl) || 0) + 1;
-      blankRetryCounts.set(tileEl, tries);
-      tileRetryManager.recordError();
-      tileRetryManager.scheduleRetry(() => {
-        if (!tileEl.parentNode) return;
-        const sep = originalSrc.includes('?') ? '&' : '?';
-        geeTileQueue.enqueue(tileEl, `${originalSrc}${sep}_blank_retry=${tries}`);
-      }, 3000 * tries); // 3 s, 6 s, 9 s — goes back through the rate-limited queue
-    });
+    // NOTE: a previous version retried any fully-transparent tile (suspecting a
+    // GEE cold-pipeline blank). In practice this fires for every ocean / no-data
+    // tile on a global view and creates a self-inflicted 429 storm that's far
+    // worse than the occasional missing tile it was meant to fix. The HTTP-error
+    // retry above already handles real failures, so blank-tile retry is removed.
 
     return () => {
       geeTileQueue.drain(); // drop queued-but-unsent tile requests for this layer
@@ -378,11 +349,12 @@ function PatternTileLayer({ patternUrl, opacity, maxNativeZoom = 8 }) {
         const img = new Image();
         img.crossOrigin = 'anonymous';
 
-        // Retry transient GEE tile failures.
+        // Retry transient GEE tile failures. Capped at 1 retry — beyond that we
+        // are almost certainly amplifying a 429 burst rather than recovering.
         let attempts = 0;
         img.onerror = function () {
           attempts += 1;
-          if (attempts > 3) {
+          if (attempts > 1) {
             done(null, canvas);
             return;
           }
@@ -390,7 +362,7 @@ function PatternTileLayer({ patternUrl, opacity, maxNativeZoom = 8 }) {
           const sep = url.includes('?') ? '&' : '?';
           tileRetryManager.scheduleRetry(
             () => { geeTileQueue.enqueue(img, `${url}${sep}_retry=${attempts}`); },
-            1500 * attempts // 1.5 s, 3 s, 4.5 s — goes back through the rate-limited queue
+            3000 * attempts // 3 s — goes back through the rate-limited queue
           );
         };
 
@@ -737,6 +709,9 @@ function OpacitySlider({ value, onChange }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+// All layer keys that can be prefetched (includes the pattern overlay).
+const ALL_TILE_LAYERS = ['gcz', 'gez', 'hlzII', 'hlzIII', 'hlzIIIPattern', 'soil'];
+
 function MapComponent({ onMapClick, selectedCoords, zoneData, panelVisible, onPanelToggle, dataset, startYear, endYear }) {
   const [tileUrls, setTileUrls] = useState(null);
   const [tilesLoading, setTilesLoading] = useState(true);
@@ -744,32 +719,68 @@ function MapComponent({ onMapClick, selectedCoords, zoneData, panelVisible, onPa
   const [activeLayer, setActiveLayer] = useState('gez');
   const [opacity, setOpacity] = useState(0.75);
   const [legendCollapsed, setLegendCollapsed] = useState(false);
+  // Tracks which layer URLs are already held in state so we don't re-fetch them.
+  const cachedUrls = useRef({});
 
   // Reset cached URLs whenever the dataset or year range changes.
   useEffect(() => {
     setTileUrls(null);
+    cachedUrls.current = {};
   }, [dataset, startYear, endYear]);
 
-  // Lazy fetch: only request the tile URL for the currently active layer.
-  // For HLZ III, also fetch the pattern mask — but sequentially (after the
-  // main layer) so GEE's getMapId pool isn't hit with two parallel requests.
+  // Fetch the active layer's tile URL. Skips the API call when the URL is
+  // already in cachedUrls. For HLZ III, the main layer and pattern mask are
+  // fetched in parallel (both are fast backend API calls, not GEE tile requests).
+  // After the active layer loads, other layers are prefetched in the background
+  // so switching between layers requires no extra wait.
   useEffect(() => {
     let cancelled = false;
 
+    const needMain    = !cachedUrls.current[activeLayer];
+    const needPattern = activeLayer === 'hlzIII' && !cachedUrls.current.hlzIIIPattern;
+
+    if (!needMain && !needPattern) {
+      setTilesLoading(false);
+      setTilesError(null);
+      return;
+    }
+
     async function fetchActive(attemptsLeft, delay) {
       try {
-        const url = await getMapTileLayer(activeLayer, dataset, startYear, endYear);
-        if (cancelled) return;
-        setTileUrls((prev) => ({ ...(prev || {}), [activeLayer]: url }));
+        if (activeLayer === 'hlzIII') {
+          // Fetch main layer and pattern mask in parallel.
+          const requests = [];
+          if (needMain)    requests.push(getMapTileLayer('hlzIII',        dataset, startYear, endYear).then(u => ({ key: 'hlzIII',        url: u })));
+          if (needPattern) requests.push(getMapTileLayer('hlzIIIPattern', dataset, startYear, endYear).then(u => ({ key: 'hlzIIIPattern', url: u })));
+          const results = await Promise.all(requests);
+          if (cancelled) return;
+          const updates = {};
+          for (const { key, url } of results) { cachedUrls.current[key] = url; updates[key] = url; }
+          setTileUrls((prev) => ({ ...(prev || {}), ...updates }));
+        } else {
+          const url = await getMapTileLayer(activeLayer, dataset, startYear, endYear);
+          if (cancelled) return;
+          cachedUrls.current[activeLayer] = url;
+          setTileUrls((prev) => ({ ...(prev || {}), [activeLayer]: url }));
+        }
+
         setTilesError(null);
         setTilesLoading(false);
-        // For HLZ III, fetch the pattern mask URL sequentially after the main layer.
-        if (activeLayer === 'hlzIII') {
-          try {
-            const patternUrl = await getMapTileLayer('hlzIIIPattern', dataset, startYear, endYear);
-            if (!cancelled) setTileUrls((prev) => ({ ...(prev || {}), hlzIIIPattern: patternUrl }));
-          } catch (_) { /* pattern overlay is optional — ignore errors */ }
-        }
+
+        // Background-prefetch the remaining layers so switching is instant.
+        // These hit the backend cache (fast) and don't block the active layer.
+        ALL_TILE_LAYERS
+          .filter((l) => !cachedUrls.current[l])
+          .forEach((layer) => {
+            getMapTileLayer(layer, dataset, startYear, endYear)
+              .then((url) => {
+                if (cancelled) return;
+                cachedUrls.current[layer] = url;
+                setTileUrls((prev) => ({ ...(prev || {}), [layer]: url }));
+              })
+              .catch(() => {});
+          });
+
       } catch (err) {
         if (cancelled) return;
         if (attemptsLeft <= 1) {

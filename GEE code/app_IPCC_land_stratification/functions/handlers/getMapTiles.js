@@ -483,7 +483,7 @@ function buildTileUrl(mapId) {
 // EE map tile tokens stay valid for hours; we expire entries after 60 min so a
 // long-running server eventually refreshes them. Concurrent requests for the
 // same key share a single in-flight Promise to avoid duplicate GEE work.
-const TILE_CACHE_TTL_MS = 60 * 60 * 1000; // 60 minutes
+const TILE_CACHE_TTL_MS = 3 * 60 * 60 * 1000; // 3 hours (GEE tokens stay valid well beyond this)
 const layerCache = new Map();     // layerKey -> { url, expiresAt }
 const layerInFlight = new Map();  // layerKey -> Promise<string>
 
@@ -602,12 +602,14 @@ async function getMapTiles(req, res) {
       const cached = layerCache.get(key);
       const wasCached = !!(cached && cached.expiresAt > Date.now());
       const url = await getLayerUrl(ee, requestedLayer, dataset, startYear, endYear);
+      res.set('Cache-Control', 'public, max-age=300');
       res.set('X-Tile-Cache', wasCached ? 'hit' : 'miss');
       return res.status(200).json({ [requestedLayer]: url });
     }
 
     // Bundle mode (back-compat): returns all layers in one payload.
     const value = await computeTileBundle(ee, dataset, startYear, endYear);
+    res.set('Cache-Control', 'public, max-age=300');
     return res.status(200).json(value);
   } catch (err) {
     console.error('Error in getMapTiles:', err);

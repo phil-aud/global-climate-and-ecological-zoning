@@ -4,6 +4,7 @@
  */
 
 import axios from 'axios';
+import { EarthEngineTile, earthEngineTileSource } from './eeTileSource';
 
 // Change this to your Firebase function URL
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/climate-and-ecological-zoning/us-central1';
@@ -155,13 +156,13 @@ export function prewarmTileUrl(urlTemplate, zooms = [2]) {
   if (!urlTemplate || typeof urlTemplate !== 'string') return Promise.resolve();
   const subdomains = ['a', 'b', 'c'];
 
-  // Build the work queue.
-  const queue = [];
+  // Build the list of tile URLs to warm.
+  const urls = [];
   for (const z of zooms) {
     const n = 1 << z;
     for (let x = 0; x < n; x++) {
       for (let y = 0; y < n; y++) {
-        queue.push(
+        urls.push(
           urlTemplate
             .replace('{s}', subdomains[(x + y) % subdomains.length])
             .replace('{z}', String(z))
@@ -172,29 +173,32 @@ export function prewarmTileUrl(urlTemplate, zooms = [2]) {
     }
   }
 
-  // Throttle to ~3 in-flight requests at a time so the prewarm doesn't
-  // saturate the browser's 6-connections-per-host limit and starve the
-  // *visible* map tiles, which would make the user-facing map appear
-  // blank/slow exactly when they expect it to be fast.
-  const CONCURRENCY = 3;
+  // Route every prewarm request through the SAME global EE token pool that the
+  // map's visible tiles use (ee.layers.EarthEngineTileSource keeps one static
+  // TOKEN_POOL_ shared across all layers). Two things fall out of this:
+  //   • Total in-flight GEE requests never exceed the pool limit, so a background
+  //     prewarm can't stack on top of the visible-tile requests and trigger an
+  //     HTTP 429 burst — which the old standalone CONCURRENCY=3 throttle could.
+  //   • Prewarm is enqueued at the LOWEST priority (largest priority number =
+  //     back of the queue), so a real tile the user is looking at always
+  //     preempts opportunistic cache-warming.
+  // maxRetries:0 keeps a failed prewarm from holding a token through backoff;
+  // the real visible-tile load retries properly when the user navigates there.
+  // The XHR GET warms the browser HTTP cache that the visible tile's XHR load
+  // then hits, plus GEE's per-mapId edge cache — same as the old <img> warm-up.
+  const PREWARM_PRIORITY = Number.MAX_SAFE_INTEGER;
   return new Promise((resolveAll) => {
-    let i = 0;
-    let active = 0;
-    const next = () => {
-      if (i >= queue.length && active === 0) {
-        resolveAll();
-        return;
-      }
-      while (active < CONCURRENCY && i < queue.length) {
-        const url = queue[i++];
-        active += 1;
-        const img = new Image();
-        const done = () => { active -= 1; next(); };
-        img.onload = img.onerror = done;
-        img.src = url;
-      }
-    };
-    next();
+    let remaining = urls.length;
+    if (remaining === 0) { resolveAll(); return; }
+    const settle = () => { remaining -= 1; if (remaining === 0) resolveAll(); };
+    for (const url of urls) {
+      const tile = new EarthEngineTile(new Image(), url, {
+        onLoad: settle,
+        onError: settle,
+        maxRetries: 0,
+      });
+      earthEngineTileSource.loadTile(tile, PREWARM_PRIORITY);
+    }
   });
 }
 

@@ -10,6 +10,7 @@ import iconRetinaUrl from 'leaflet/dist/images/marker-icon-2x.png';
 import iconUrl from 'leaflet/dist/images/marker-icon.png';
 import shadowUrl from 'leaflet/dist/images/marker-shadow.png';
 import { getMapTileLayer } from '../utils/api';
+import { EarthEngineTile, earthEngineTileSource } from '../utils/eeTileSource';
 import { LAYER_CONFIG, HLZIII_PALETTE_GROUPS } from '../utils/zonePalettes';
 import './MapComponent.css';
 
@@ -68,116 +69,44 @@ function tileMaxNativeZoom(layer, dataset) {
   return dataset === 'terraclimate' ? 8 : 6;
 }
 
-// ── GEE tile request throttle ─────────────────────────────────────────────────
+// ── Earth Engine-aligned tile loading ─────────────────────────────────────────
 //
-// GEE's tile server enforces a per-token concurrent-request quota.  At zoom 2
-// Leaflet fires ~16 tile requests simultaneously, which immediately saturates
-// the quota and produces a burst of HTTP 429 responses.
-//
-// `geeTileQueue` is a simple semaphore that caps concurrent GEE tile fetches.
-// `ThrottledTileLayer` is an `L.TileLayer` subclass that routes every tile's
-// `img.src` assignment through this queue instead of setting it directly.
-const geeTileQueue = (() => {
-  // GEE's tile endpoint enforces a fairly low per-token request rate. Empirically
-  // 2 concurrent + 300 ms (~3 req/s) is enough to trigger HTTP 429 bursts on a
-  // fresh map load, especially when the pattern overlay is active and doubles
-  // the request count for every visible HLZ III tile. 1 concurrent + 500 ms
-  // (~2 req/s) reliably stays under the quota without making panning feel slow.
-  const MAX_CONCURRENT  = 1;    // max simultaneous GEE tile requests
-  const MIN_INTERVAL_MS = 500;  // minimum ms between consecutive dispatches (~2 req/s)
-  let active = 0;
-  let nextAllowedAt = 0;        // earliest timestamp for the next dispatch
-  let flushPending = false;     // prevents multiple concurrent setTimeout calls
-  const waiting = [];
-  const pendingUrls = new WeakMap();
+// The PriorityPool + EarthEngineTile + earthEngineTileSource port lives in
+// ../utils/eeTileSource.js so the SAME global token pool is shared with the tile
+// prewarmer in utils/api.js — mirroring how ee.layers.EarthEngineTileSource keeps
+// a single static TOKEN_POOL_ across every layer and tile request. Only the
+// Leaflet-specific EarthEngineTileLayer stays here.
 
-  function flush() {
-    flushPending = false;
-    while (waiting.length > 0 && active < MAX_CONCURRENT) {
-      const now = Date.now();
-      const wait = nextAllowedAt - now;
-      if (wait > 0) {
-        // Rate-limited: schedule one flush after the window expires.
-        if (!flushPending) { flushPending = true; setTimeout(flush, wait); }
-        return;
-      }
-      const { img, src } = waiting.shift();
-      active += 1;
-      nextAllowedAt = Date.now() + MIN_INTERVAL_MS;
-      const finish = () => { active -= 1; flush(); };
-      img.addEventListener('load',  finish, { once: true });
-      img.addEventListener('error', finish, { once: true });
-      img.src = src;
-    }
-  }
-
-  return {
-    enqueue(img, src) {
-      pendingUrls.set(img, src);
-      waiting.push({ img, src });
-      if (!flushPending) flush();
-    },
-    /** Returns the pending URL for a tile whose src hasn't been set yet. */
-    getUrl(img) { return pendingUrls.get(img); },
-    /** Drop all queued-but-not-yet-dispatched requests (call when switching layers). */
-    drain() { waiting.length = 0; },
-  };
-})();
-
-const ThrottledTileLayer = L.TileLayer.extend({
+/**
+ * L.TileLayer that loads tiles through earthEngineTileSource (the EE token pool +
+ * XHR loader) rather than letting the browser fetch each <img> directly. This is
+ * the Leaflet counterpart of attaching an ee.layers.ImageOverlay to a Google Map.
+ */
+const EarthEngineTileLayer = L.TileLayer.extend({
   createTile(coords, done) {
-    // Do NOT call L.TileLayer.prototype.createTile — it sets tile.src immediately,
-    // firing all HTTP requests before we can intercept them. Instead, replicate
-    // exactly what Leaflet does but withhold the src until the queue has a slot.
-    const tile = document.createElement('img');
-    L.DomEvent.on(tile, 'load',  L.Util.bind(this._tileOnLoad,  this, done, tile));
-    L.DomEvent.on(tile, 'error', L.Util.bind(this._tileOnError, this, done, tile));
+    const img = document.createElement('img');
     if (this.options.crossOrigin || this.options.crossOrigin === '') {
-      tile.crossOrigin = this.options.crossOrigin === true ? '' : this.options.crossOrigin;
+      img.crossOrigin = this.options.crossOrigin === true ? '' : this.options.crossOrigin;
     }
-    tile.alt = '';
-    tile.setAttribute('role', 'presentation');
-    geeTileQueue.enqueue(tile, this.getTileUrl(coords));
-    return tile;
+    img.alt = '';
+    img.setAttribute('role', 'presentation');
+
+    const errorTileUrl = this.options.errorTileUrl;
+    const tile = new EarthEngineTile(img, this.getTileUrl(coords), {
+      onLoad: () => done(null, img),
+      onError: () => {
+        if (errorTileUrl) img.src = errorTileUrl;
+        done(new Error('Tile failed to load'), img);
+      },
+    });
+    img._eeTile = tile; // so 'tileunload' can abort it (EE's releaseTile())
+
+    // Priority = creation time (seconds); smaller = front of queue, preserving
+    // the center-out creation order — identical to AbstractOverlay.getTile().
+    earthEngineTileSource.loadTile(tile, Date.now() / 1000);
+    return img;
   },
 });
-
-// ── Tile retry circuit breaker ─────────────────────────────────────────────────
-//
-// GEE's tile server enforces per-token request-rate quotas. When many tiles
-// fail simultaneously (HTTP 429) the naive per-tile exponential-backoff creates
-// a retry storm that keeps hitting the quota, prolonging the outage.
-//
-// This circuit breaker is shared across all ZoneTileLayer and PatternTileLayer
-// instances. It counts tile errors in a sliding 5-second window; once the
-// threshold is reached it opens the circuit and defers ALL retry timeouts
-// until the break period has elapsed.
-const tileRetryManager = (() => {
-  const WINDOW_MS        = 10_000;  // sliding error-count window
-  const ERROR_THRESHOLD  = 3;       // errors in window → open circuit (was 6 — too lax for 429 bursts)
-  const CIRCUIT_BREAK_MS = 60_000;  // pause duration after threshold (~60 s)
-  let errorTimestamps = [];
-  let pauseUntil = 0;
-  return {
-    recordError() {
-      const now = Date.now();
-      errorTimestamps = errorTimestamps.filter((t) => now - t < WINDOW_MS);
-      errorTimestamps.push(now);
-      if (errorTimestamps.length >= ERROR_THRESHOLD && now > pauseUntil) {
-        pauseUntil = now + CIRCUIT_BREAK_MS;
-        console.warn(
-          `[TileRetry] Rate-limit circuit breaker opened — retries paused for ${CIRCUIT_BREAK_MS / 1000}s`
-        );
-        errorTimestamps = [];
-      }
-    },
-    /** Schedule fn after baseDelayMs, or after the circuit-break window ends — whichever is later. */
-    scheduleRetry(fn, baseDelayMs) {
-      const delay = Math.max(baseDelayMs, pauseUntil - Date.now() + 200);
-      return setTimeout(fn, delay);
-    },
-  };
-})();
 
 /**
  * Manages the zone overlay tile layer imperatively so we can swap it
@@ -196,20 +125,16 @@ function ZoneTileLayer({ tileUrl, opacity, maxNativeZoom = 8 }) {
   useEffect(() => {
     if (!tileUrl) return;
     if (layerRef.current) {
-      // Abort in-flight requests before swapping layers
-      if (layerRef.current._tiles) {
-        Object.values(layerRef.current._tiles).forEach(({ el }) => {
-          if (el && !el.complete) { el.onload = null; el.onerror = null; el.src = ''; }
-        });
-      }
+      // removeLayer fires 'tileunload' for every tile → aborts in-flight loads.
       map.removeLayer(layerRef.current);
     }
-    layerRef.current = new ThrottledTileLayer(tileUrl, {
+    layerRef.current = new EarthEngineTileLayer(tileUrl, {
       opacity,
       attribution: 'GEE / ee-philaudebert',
       maxZoom: 18,
       maxNativeZoom,
-      // Allow canvas pixel-reads so we can detect GEE cold-pipeline blank tiles.
+      // Tiles arrive as same-origin object URLs (never CORS-tainted), but keep
+      // crossOrigin set so the <img> stays canvas-readable for the pattern path.
       crossOrigin: 'anonymous',
       className: 'gee-zone-tile',
       // keepBuffer=1: only pre-load 1 tile beyond the viewport edge.
@@ -225,61 +150,18 @@ function ZoneTileLayer({ tileUrl, opacity, maxNativeZoom = 8 }) {
         'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=',
     }).addTo(map);
 
-    // Capture the original GEE URL at tileloadstart ONCE (do not overwrite on
-    // retry requests so originalSrc always points to the clean GEE URL).
-    // For throttled tiles img.src is empty at tileloadstart (the queue sets it
-    // later), so fall back to geeTileQueue.getUrl() which stores it from enqueue.
-    const tileOriginalUrls = new Map();
-    layerRef.current.on('tileloadstart', (e) => {
-      if (e.tile && !tileOriginalUrls.has(e.tile)) {
-        const src = e.tile.src || geeTileQueue.getUrl(e.tile);
-        if (src && !src.startsWith('data:')) tileOriginalUrls.set(e.tile, src);
-      }
+    // EE's AbstractOverlay.releaseTile(): the moment Leaflet drops a tile from
+    // view, abort its in-flight XHR (or release its still-queued slot in the
+    // token pool) so we never finish a request for a no-longer-visible tile.
+    // Retries and HTTP-429 backoff live inside EarthEngineTile, so no per-tile
+    // retry wiring is needed here anymore.
+    layerRef.current.on('tileunload', (e) => {
+      if (e.tile && e.tile._eeTile) e.tile._eeTile.abort();
     });
-
-    // Retry HTTP-error tiles (4xx / 5xx) with exponential backoff.
-    // The circuit breaker defers retries automatically when GEE is rate-limiting.
-    // We can't see the HTTP status from an <img> error event, so we cap retries
-    // at 2 to avoid amplifying server-side problems (e.g. expired map IDs that
-    // will never recover, or persistent 400s).
-    const retryCounts = new WeakMap();
-    const HTTP_RETRY_MAX = 1; // single retry — beyond this we're just amplifying 429s
-    layerRef.current.on('tileerror', (e) => {
-      const tileEl = e.tile;
-      if (!tileEl) return;
-      const originalSrc = tileOriginalUrls.get(tileEl);
-      if (!originalSrc || originalSrc.startsWith('data:')) return;
-      const tries = (retryCounts.get(tileEl) || 0) + 1;
-      if (tries > HTTP_RETRY_MAX) return;
-      retryCounts.set(tileEl, tries);
-      tileRetryManager.recordError();
-      tileRetryManager.scheduleRetry(() => {
-        if (!tileEl.parentNode) return;
-        const sep = originalSrc.includes('?') ? '&' : '?';
-        geeTileQueue.enqueue(tileEl, `${originalSrc}${sep}_retry=${tries}`);
-      }, 2000 * tries); // 2 s, 4 s, 6 s — goes back through the rate-limited queue
-    });
-
-    // NOTE: a previous version retried any fully-transparent tile (suspecting a
-    // GEE cold-pipeline blank). In practice this fires for every ocean / no-data
-    // tile on a global view and creates a self-inflicted 429 storm that's far
-    // worse than the occasional missing tile it was meant to fix. The HTTP-error
-    // retry above already handles real failures, so blank-tile retry is removed.
 
     return () => {
-      geeTileQueue.drain(); // drop queued-but-unsent tile requests for this layer
       if (layerRef.current) {
-        const layer = layerRef.current;
-        if (layer._tiles) {
-          Object.values(layer._tiles).forEach(({ el }) => {
-            if (el && !el.complete) {
-              el.onload = null;
-              el.onerror = null;
-              el.src = '';
-            }
-          });
-        }
-        map.removeLayer(layer);
+        map.removeLayer(layerRef.current); // aborts remaining tiles via tileunload
         layerRef.current = null;
       }
     };
@@ -349,24 +231,9 @@ function PatternTileLayer({ patternUrl, opacity, maxNativeZoom = 8 }) {
         const img = new Image();
         img.crossOrigin = 'anonymous';
 
-        // Retry transient GEE tile failures. Capped at 1 retry — beyond that we
-        // are almost certainly amplifying a 429 burst rather than recovering.
-        let attempts = 0;
-        img.onerror = function () {
-          attempts += 1;
-          if (attempts > 1) {
-            done(null, canvas);
-            return;
-          }
-          tileRetryManager.recordError();
-          const sep = url.includes('?') ? '&' : '?';
-          tileRetryManager.scheduleRetry(
-            () => { geeTileQueue.enqueue(img, `${url}${sep}_retry=${attempts}`); },
-            3000 * attempts // 3 s — goes back through the rate-limited queue
-          );
-        };
-
-        img.onload = function () {
+        // Draws the pattern marks onto the canvas once the GEE mask tile has
+        // loaded. (Retries / HTTP-429 backoff are handled by EarthEngineTile.)
+        const renderPattern = () => {
           const w = tileSize.x;
           const h = tileSize.y;
 
@@ -488,9 +355,14 @@ function PatternTileLayer({ patternUrl, opacity, maxNativeZoom = 8 }) {
           done(null, canvas);
         };
 
-        // Route through the shared GEE request throttle (max 4 concurrent)
-        // to avoid 429 rate-limit bursts when all pattern tiles fire at once.
-        geeTileQueue.enqueue(img, url);
+        // Load the GEE mask tile through the EE token pool + XHR loader. On
+        // terminal failure, emit a transparent tile so the map isn't blocked.
+        const tile = new EarthEngineTile(img, url, {
+          onLoad: renderPattern,
+          onError: () => done(null, canvas),
+        });
+        canvas._eeTile = tile; // so 'tileunload' can abort it (EE's releaseTile())
+        earthEngineTileSource.loadTile(tile, Date.now() / 1000);
         return canvas;
       },
     });
@@ -506,6 +378,12 @@ function PatternTileLayer({ patternUrl, opacity, maxNativeZoom = 8 }) {
     });
     layer.addTo(map);
     layerRef.current = layer;
+
+    // EE's AbstractOverlay.releaseTile(): abort a pattern tile's load the moment
+    // Leaflet drops it from view so its XHR / token-pool slot is freed.
+    layer.on('tileunload', (e) => {
+      if (e.tile && e.tile._eeTile) e.tile._eeTile.abort();
+    });
 
     return () => {
       if (layerRef.current) {

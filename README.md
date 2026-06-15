@@ -9,12 +9,12 @@ Click any location to query its climate and ecological zone classification, mont
 ## Repository contents
 
 This repository contains the source code for the app, located in
-[`GEE code/app_IPCC_land_stratification/`](GEE%20code/app_IPCC_land_stratification/):
+[`app_IPCC_land_stratification/`](app_IPCC_land_stratification/):
 
 - **`frontend/`** — React + Leaflet map and UI
 - **`functions/`** — Firebase Cloud Functions backend (calls the Google Earth Engine API server-side)
 
-See the [app README](GEE%20code/app_IPCC_land_stratification/README.md) for setup, development, deployment, and API details.
+See the [app README](app_IPCC_land_stratification/README.md) for setup, development, deployment, and API details.
 
 ## Tech stack
 

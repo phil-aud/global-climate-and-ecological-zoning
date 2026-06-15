@@ -7,11 +7,26 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { queryZones } from '../utils/api';
 import HoldridgeTriangle from './HoldridgeTriangle';
 import GlobalClimateZonesTriangle from './GlobalClimateZonesTriangle';
+import DownloadButtons from './DownloadButtons';
+import { downloadCSV, downloadCompositePNG } from '../utils/exportFigure';
 
 function ZonePanel({ coords, zoneData, bioData, onCoordsChange, onZoneDataUpdate, loading, onLoadingChange, onError, dataset }) {
   const [localLon, setLocalLon] = useState(coords?.lon ?? '');
   const [localLat, setLocalLat] = useState(coords?.lat ?? '');
   const [altBeltsExpanded, setAltBeltsExpanded] = useState(false);
+  const altBeltsRef = useRef(null);
+
+  const hasAltData = bioData && (bioData.t0Bio != null || bioData.elevation != null);
+  const downloadAltBeltsCSV = () => {
+    downloadCSV(
+      'latitudinal_regions_altitudinal_belts_point',
+      ['Variable', 'Value'],
+      [
+        ['Mean annual biotemperature at sea-level t0Bio (°C)', bioData?.t0Bio],
+        ['Elevation (m)', bioData?.elevation],
+      ]
+    );
+  };
 
   // ── Altitudinal belts marker ─────────────────────────────────────────────────
   // SVG viewBox: 0 0 1329.03 1033.73
@@ -142,16 +157,23 @@ function ZonePanel({ coords, zoneData, bioData, onCoordsChange, onZoneDataUpdate
         <div className="holdridge-triangle-container">
           <div className="pyramid-subsection-header">
             <span className="pyramid-subsection-title">Latitudinal regions and altitudinal belts</span>
-            <button
-              className="hlz-maximize-btn"
-              onClick={() => setAltBeltsExpanded(true)}
-              title="Maximise"
-              aria-label="Maximise altitudinal belts diagram"
-            >
-              &#x26F6;
-            </button>
+            <span className="hlz-header-actions">
+              <DownloadButtons
+                label="latitudinal regions and altitudinal belts diagram"
+                onPng={() => downloadCompositePNG(altBeltsRef.current, 'latitudinal_regions_altitudinal_belts')}
+                onCsv={hasAltData ? downloadAltBeltsCSV : undefined}
+              />
+              <button
+                className="hlz-maximize-btn"
+                onClick={() => setAltBeltsExpanded(true)}
+                title="Maximise"
+                aria-label="Maximise altitudinal belts diagram"
+              >
+                &#x26F6;
+              </button>
+            </span>
           </div>
-          <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
+          <div ref={altBeltsRef} style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
             <img
               src="/Altidudinal_belts.svg"
               alt="Latitudinal regions and altitudinal belts in the Holdridge Life Zones"

@@ -11,8 +11,10 @@
  * (viewBox="0 0 1370 1172.24").
  */
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { GCZ_PALETTE } from '../utils/zonePalettes';
+import DownloadButtons from './DownloadButtons';
+import { downloadCSV, downloadCompositePNG } from '../utils/exportFigure';
 
 // ── pyramid2.svg coordinate system ────────────────────────────────────────────
 const IMG2_W = 1370;
@@ -55,6 +57,23 @@ function leftSideXatY(y) {
 
 function GlobalClimateZonesTriangle({ bioData }) {
   const [expanded, setExpanded] = useState(false);
+  const figureRef = useRef(null);
+
+  const hasBioData = bioData && (
+    bioData.biotemperature != null || bioData.precipitation != null || bioData.petRatio != null
+  );
+  const downloadGczCSV = () => {
+    downloadCSV(
+      'global_climate_zone_pyramid_point',
+      ['Variable', 'Value'],
+      [
+        ['Mean annual biotemperature tBio (°C)', bioData?.biotemperature],
+        ['Mean annual precipitation P (mm)', bioData?.precipitation],
+        ['Potential evapotranspiration ratio', bioData?.petRatio],
+        ['Elevation (m)', bioData?.elevation],
+      ]
+    );
+  };
 
   // Close modal on Escape key
   useEffect(() => {
@@ -235,17 +254,24 @@ function GlobalClimateZonesTriangle({ bioData }) {
     <div className="holdridge-triangle-container">
       <div className="pyramid-subsection-header">
         <span className="pyramid-subsection-title">Global Climate Zone pyramid</span>
-        <button
-          className="hlz-maximize-btn"
-          onClick={() => setExpanded(true)}
-          title="Maximise"
-          aria-label="Maximise pyramid"
-        >
-          &#x26F6;
-        </button>
+        <span className="hlz-header-actions">
+          <DownloadButtons
+            label="Global Climate Zone pyramid"
+            onPng={() => downloadCompositePNG(figureRef.current, 'global_climate_zone_pyramid')}
+            onCsv={hasBioData ? downloadGczCSV : undefined}
+          />
+          <button
+            className="hlz-maximize-btn"
+            onClick={() => setExpanded(true)}
+            title="Maximise"
+            aria-label="Maximise pyramid"
+          >
+            &#x26F6;
+          </button>
+        </span>
       </div>
 
-      {pyramidContent}
+      <div ref={figureRef}>{pyramidContent}</div>
 
       {/* GCZ colour legend */}
       <div style={{ marginTop: 8, padding: '6px 4px', display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}>

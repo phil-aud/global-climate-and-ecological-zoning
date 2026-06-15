@@ -935,6 +935,68 @@ body {
   color: var(--text, #222);
 }
 
+/* Groups the maximise + download controls together on the right of a figure
+   header so the header keeps just two flex children (title | actions). */
+.hlz-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Single download control with a hover/focus dropdown of export formats. */
+.hlz-download-menu {
+  position: relative;
+  display: inline-flex;
+}
+.hlz-download-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 5px;
+}
+.hlz-download-trigger svg {
+  display: block;
+}
+
+.hlz-download-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  /* No vertical gap so the pointer stays within the hover area when moving
+     from the trigger down into the menu. */
+  display: none;
+  flex-direction: column;
+  min-width: 96px;
+  padding: 4px;
+  background: var(--bg, #fff);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  z-index: 10000;
+}
+.hlz-download-menu:hover > .hlz-download-dropdown,
+.hlz-download-menu:focus-within > .hlz-download-dropdown {
+  display: flex;
+}
+
+.hlz-download-dropdown button {
+  background: none;
+  border: none;
+  border-radius: 4px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.2;
+  padding: 7px 10px;
+  color: var(--text, #222);
+  transition: background 0.12s;
+}
+.hlz-download-dropdown button:hover {
+  background: var(--border);
+}
+
 .hlz-modal-backdrop {
   position: fixed;
   inset: 0;

@@ -10,7 +10,9 @@
  * The SVG viewBox maps directly to these coordinates.
  */
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import DownloadButtons from './DownloadButtons';
+import { downloadCSV, downloadCompositePNG } from '../utils/exportFigure';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const SIDE = 600; // triangle side length in coordinate units
@@ -164,6 +166,24 @@ const HLZ_LEGEND = [
 
 function HoldridgeTriangle({ bioData, imgSrc, hideReference = false, title = 'Holdridge Life Zone Triangle', badge = 'HLZ', hideLegend = false }) {
   const [expanded, setExpanded] = useState(false);
+  const figureRef = useRef(null);
+
+  const fileSlug = String(title).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  const hasBioData = bioData && (
+    bioData.biotemperature != null || bioData.precipitation != null || bioData.petRatio != null
+  );
+  const downloadPointCSV = () => {
+    downloadCSV(
+      `${fileSlug}_point`,
+      ['Variable', 'Value'],
+      [
+        ['Mean annual biotemperature tBio (°C)', bioData?.biotemperature],
+        ['Mean annual precipitation P (mm)', bioData?.precipitation],
+        ['Potential evapotranspiration ratio', bioData?.petRatio],
+        ['Elevation (m)', bioData?.elevation],
+      ]
+    );
+  };
 
   // Close modal on Escape key
   useEffect(() => {
@@ -625,19 +645,26 @@ function HoldridgeTriangle({ bioData, imgSrc, hideReference = false, title = 'Ho
     <div className="holdridge-triangle-container">
       <div className="pyramid-subsection-header">
         <span className="pyramid-subsection-title">{title}</span>
-        <button
-          className="hlz-maximize-btn"
-          onClick={() => setExpanded(true)}
-          title="Maximise"
-          aria-label="Maximise pyramid"
-        >
-          &#x26F6;
-        </button>
+        <span className="hlz-header-actions">
+          <DownloadButtons
+            label={title}
+            onPng={() => downloadCompositePNG(figureRef.current, fileSlug)}
+            onCsv={hasBioData ? downloadPointCSV : undefined}
+          />
+          <button
+            className="hlz-maximize-btn"
+            onClick={() => setExpanded(true)}
+            title="Maximise"
+            aria-label="Maximise pyramid"
+          >
+            &#x26F6;
+          </button>
+        </span>
       </div>
 
       {/* Inline pyramid */}
       {imgSrc ? (
-        pyramidContent
+        <div ref={figureRef}>{pyramidContent}</div>
       ) : (<span />
       )}
 
@@ -660,6 +687,7 @@ function HoldridgeTriangle({ bioData, imgSrc, hideReference = false, title = 'Ho
 
       {!imgSrc && (
         <svg
+          ref={figureRef}
           viewBox={`${-margin} ${-margin} ${svgWidth} ${svgHeight}`}
           width="100%"
           style={{ maxWidth: '100%', height: 'auto', display: 'block' }}

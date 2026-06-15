@@ -6,3 +6,11 @@ node_modules/
 
 # Logs
 *.log
+
+# Local-only material (GEE scripts, data products, server logs) — kept on disk,
+# not relevant to GitHub users of the land-stratification app
+local-only/
+
+# Local editor/agent settings
+.claude/
+*.local.json

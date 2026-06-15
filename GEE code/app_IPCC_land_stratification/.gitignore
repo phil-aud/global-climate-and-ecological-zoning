@@ -37,3 +37,6 @@ build/
 credentials/
 *.json.key
 service-account-key.json
+
+# Technical guide (do not commit unless explicitly requested)
+technical-guide/

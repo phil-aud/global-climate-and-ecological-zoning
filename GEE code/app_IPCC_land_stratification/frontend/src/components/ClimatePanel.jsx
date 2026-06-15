@@ -8,6 +8,8 @@ import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, Filler } from 'chart.js';
 import { getAnnualSummary, getBioecologicalData, getMonthlyClimate, getGczTempStats, getGczMonthlyTempStats } from '../utils/api';
 import Chart from './Chart';
+import DownloadButtons from './DownloadButtons';
+import { downloadCSV, downloadChartPNG } from '../utils/exportFigure';
 
 // Filler is required for the shaded ±std band in GczMonthlyMedianChart.
 ChartJS.register(Filler);
@@ -42,6 +44,50 @@ function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, o
   const [tableExpanded, setTableExpanded] = useState(false);
   const [monthlyTableExpanded, setMonthlyTableExpanded] = useState(false);
   const [selectedGczZone, setSelectedGczZone] = useState(1);
+
+  // Refs to the two monthly Chart.js instances, used for PNG export.
+  const meanChartRef = useRef(null);
+  const medianChartRef = useRef(null);
+
+  // ── Figure export handlers ──────────────────────────────────────────────────
+  const downloadGczAnnualCSV = useCallback(() => {
+    if (!gczStats || !gczStats.rows) return;
+    downloadCSV(
+      'median_annual_temperature_per_GCZ_1995-2024',
+      ['Climate zone', 'Median (°C)', 'Min (°C)', 'Max (°C)', 'Std (°C)'],
+      gczStats.rows.map((r) => [r.label, r.median, r.min, r.max, r.std])
+    );
+  }, [gczStats]);
+
+  const downloadGczMonthlyCSV = useCallback(() => {
+    if (!gczMonthlyStats || !gczMonthlyStats.rows) return;
+    const headers = ['Climate zone'];
+    MONTH_LABELS.forEach((m) => { headers.push(`${m} median (°C)`, `${m} std (°C)`); });
+    const rows = gczMonthlyStats.rows.map((r) => {
+      const row = [r.label];
+      r.months.forEach((c) => { row.push(c && c.median != null ? c.median : '', c && c.std != null ? c.std : ''); });
+      return row;
+    });
+    downloadCSV('median_monthly_temperature_per_GCZ_1995-2024', headers, rows);
+  }, [gczMonthlyStats]);
+
+  const downloadMonthlyMeanCSV = useCallback(() => {
+    if (!monthlyData) return;
+    downloadCSV(
+      'monthly_mean_temperature_precipitation',
+      ['Month', 'Temperature (°C)', 'Precipitation (mm)'],
+      monthlyData.map((d) => [d.month, d.temperature, d.precipitation])
+    );
+  }, [monthlyData]);
+
+  const downloadMonthlyMedianCSV = useCallback(() => {
+    if (!monthlyData) return;
+    downloadCSV(
+      'monthly_median_temperature_precipitation',
+      ['Month', 'Temperature median (°C)', 'Precipitation median (mm)'],
+      monthlyData.map((d) => [d.month, d.temperatureMedian, d.precipitationMedian])
+    );
+  }, [monthlyData]);
 
   // Track the years + dataset used for the last fetch so changes also trigger a refetch
   const lastFetch = useRef(null);
@@ -181,14 +227,17 @@ function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, o
               Median mean annual temperature per Global Climate Zone <span className="gcz-stats-period">(1995–2024)</span>
             </p>
             {gczStats && gczStats.rows && (
-              <button
-                className="hlz-maximize-btn"
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setTableExpanded(true); }}
-                title="Maximise"
-                aria-label="Maximise table"
-              >
-                &#x26F6;
-              </button>
+              <span className="hlz-header-actions">
+                <DownloadButtons label="annual temperature table" stopEvents onCsv={downloadGczAnnualCSV} />
+                <button
+                  className="hlz-maximize-btn"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setTableExpanded(true); }}
+                  title="Maximise"
+                  aria-label="Maximise table"
+                >
+                  &#x26F6;
+                </button>
+              </span>
             )}
           </summary>
           {gczStatsLoading && <div className="loading">Loading per-zone temperature…</div>}
@@ -268,14 +317,17 @@ function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, o
             Median monthly mean temperature per Global Climate Zone <span className="gcz-stats-period">(1995–2024, °C — median (std))</span>
           </p>
           {gczMonthlyStats && gczMonthlyStats.rows && (
-            <button
-              className="hlz-maximize-btn"
-              onClick={() => setMonthlyTableExpanded(true)}
-              title="Maximise"
-              aria-label="Maximise monthly table"
-            >
-              &#x26F6;
-            </button>
+            <span className="hlz-header-actions">
+              <DownloadButtons label="monthly temperature table" onCsv={downloadGczMonthlyCSV} />
+              <button
+                className="hlz-maximize-btn"
+                onClick={() => setMonthlyTableExpanded(true)}
+                title="Maximise"
+                aria-label="Maximise monthly table"
+              >
+                &#x26F6;
+              </button>
+            </span>
           )}
         </div>
         {gczMonthlyStatsLoading && <div className="loading">Loading per-zone monthly temperature…</div>}
@@ -391,16 +443,24 @@ function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, o
         <div className="monthly-chart-section">
           <div className="pyramid-subsection-header">
             <span className="pyramid-subsection-title">Monthly mean climate chart</span>
-            <button
-              className="hlz-maximize-btn"
-              onClick={() => setChartExpanded(true)}
-              title="Maximise"
-              aria-label="Maximise chart"
-            >
-              &#x26F6;
-            </button>
+            <span className="hlz-header-actions">
+              <DownloadButtons
+                label="monthly mean climate chart"
+                onPng={() => downloadChartPNG(meanChartRef, 'monthly_mean_climate_chart')}
+                onCsv={downloadMonthlyMeanCSV}
+              />
+              <button
+                className="hlz-maximize-btn"
+                onClick={() => setChartExpanded(true)}
+                title="Maximise"
+                aria-label="Maximise chart"
+              >
+                &#x26F6;
+              </button>
+            </span>
           </div>
           <Chart
+            chartRef={meanChartRef}
             data={monthlyData}
             tempKey="temperature"
             precipKey="precipitation"
@@ -426,16 +486,24 @@ function ClimatePanel({ coords, onClimateDataUpdate, loading, onLoadingChange, o
         <div className="monthly-chart-section">
           <div className="pyramid-subsection-header">
             <span className="pyramid-subsection-title">Monthly median climate chart</span>
-            <button
-              className="hlz-maximize-btn"
-              onClick={() => setChartMedianExpanded(true)}
-              title="Maximise"
-              aria-label="Maximise median chart"
-            >
-              &#x26F6;
-            </button>
+            <span className="hlz-header-actions">
+              <DownloadButtons
+                label="monthly median climate chart"
+                onPng={() => downloadChartPNG(medianChartRef, 'monthly_median_climate_chart')}
+                onCsv={downloadMonthlyMedianCSV}
+              />
+              <button
+                className="hlz-maximize-btn"
+                onClick={() => setChartMedianExpanded(true)}
+                title="Maximise"
+                aria-label="Maximise median chart"
+              >
+                &#x26F6;
+              </button>
+            </span>
           </div>
           <Chart
+            chartRef={medianChartRef}
             data={monthlyData}
             tempKey="temperatureMedian"
             precipKey="precipitationMedian"
@@ -491,6 +559,7 @@ function hexToRgba(hex, alpha) {
  */
 function GczMonthlyMedianChart({ rows, selectedZone, onSelectZone }) {
   const [expanded, setExpanded] = useState(false);
+  const chartRef = useRef(null);
 
   // Close on Escape while modal is open
   useEffect(() => {
@@ -520,6 +589,19 @@ function GczMonthlyMedianChart({ rows, selectedZone, onSelectZone }) {
     if (!isFinite(lo) || !isFinite(hi)) return [-40, 40];
     return [Math.floor(lo / 10) * 10, Math.ceil(hi / 10) * 10];
   }, [rows]);
+
+  const slug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  const downloadZoneCSV = () => {
+    downloadCSV(
+      `median_monthly_temperature_${slug(row.label)}_1995-2024`,
+      ['Month', 'Median (°C)', 'Std (°C)'],
+      row.months.map((c, i) => [
+        MONTH_LABELS[i],
+        c && c.median != null ? c.median : '',
+        c && c.std != null ? c.std : '',
+      ])
+    );
+  };
 
   const color = GCZ_COLORS[row.zone] ?? '#888';
   const labels = MONTH_LABELS;
@@ -664,6 +746,11 @@ function GczMonthlyMedianChart({ rows, selectedZone, onSelectZone }) {
               ))}
             </select>
           </label>
+          <DownloadButtons
+            label="median monthly temperature chart"
+            onPng={() => downloadChartPNG(chartRef, `median_monthly_temperature_${slug(row.label)}_chart`)}
+            onCsv={downloadZoneCSV}
+          />
           <button
             className="hlz-maximize-btn"
             onClick={() => setExpanded(true)}
@@ -675,7 +762,7 @@ function GczMonthlyMedianChart({ rows, selectedZone, onSelectZone }) {
         </div>
       </div>
       <div className="gcz-monthly-median-chart-canvas">
-        <Line data={data} options={options} />
+        <Line ref={chartRef} data={data} options={options} />
       </div>
       {expanded && (
         <div className="hlz-modal-backdrop" onClick={() => setExpanded(false)}>

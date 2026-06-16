@@ -96,3 +96,14 @@ export const DATA_PRODUCTS = {
     ],
   },
 };
+
+/**
+ * IPCC major soil types — a single global ~927 m raster, independent of the
+ * climatology selection (so shown for both). Separate authorship:
+ * Sinitambirivoutin et al. 2024 (CATENA 244, 108258).
+ */
+export const SOIL_PRODUCT = {
+  key: 'soil',
+  name: 'IPCC Major Soil Types (global)',
+  tif: 'IPCC_soil_global_927m.tif',
+};

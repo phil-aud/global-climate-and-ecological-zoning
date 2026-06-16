@@ -1,14 +1,16 @@
 /**
  * DataDownloads
- * Lists the published GIS products (GCZ / GEZ / HLZ) for the currently selected
- * climatology and links to the archival downloads on Zenodo (direct file URLs,
- * no account required). Heavy files are not bundled with the app — see
- * utils/dataProducts.js.
+ * Offers the published GIS products as GeoTIFF rasters (the authoritative format):
+ * the GCZ / GEZ / HLZ layers for the selected climatology plus the global IPCC
+ * soil map. Shapefile (.zip) versions and the full archive are reached via the
+ * linked Zenodo record. Direct file URLs, no account required; heavy files are
+ * not bundled with the app — see utils/dataProducts.js.
  */
 import React from 'react';
 import {
   DATA_PRODUCTS,
   DATA_PUBLISHED,
+  SOIL_PRODUCT,
   ZENODO_DOI,
   ZENODO_DOI_URL,
   ZENODO_RECORD_URL,
@@ -51,9 +53,10 @@ function DataDownloads({ dataset = 'cru' }) {
       </div>
 
       <p className="panel-desc">
-        The published GCZ, GEZ and Holdridge Life Zone layers (1995–2024) are archived on
-        Zenodo with a citable DOI — downloads need no account. Showing the{' '}
-        <strong>{group.label}</strong> set; switch the climatology above for the other.
+        Download the published layers as GeoTIFF rasters — the authoritative format
+        (the shapefile versions are a lossy conversion). Showing the{' '}
+        <strong>{group.label}</strong> climatology; switch above for the other. The
+        IPCC soil map is global (identical for both).
       </p>
 
       {!DATA_PUBLISHED && (
@@ -68,16 +71,21 @@ function DataDownloads({ dataset = 'cru' }) {
             <div className="zone-label data-dl-name">{p.name}</div>
             <div className="zone-value data-dl-actions">
               <FormatLink filename={p.tif}>GeoTIFF</FormatLink>
-              <FormatLink filename={p.zip}>Shapefile</FormatLink>
             </div>
           </div>
         ))}
+        <div className="zone-row data-dl-row" key={SOIL_PRODUCT.key}>
+          <div className="zone-label data-dl-name">{SOIL_PRODUCT.name}</div>
+          <div className="zone-value data-dl-actions">
+            <FormatLink filename={SOIL_PRODUCT.tif}>GeoTIFF</FormatLink>
+          </div>
+        </div>
       </div>
 
       <p className="panel-desc data-dl-cite">
         {DATA_PUBLISHED ? (
           <>
-            All files, legends and metadata:{' '}
+            Shapefile (.zip) versions, legends and all files:{' '}
             <a href={ZENODO_RECORD_URL} target="_blank" rel="noopener noreferrer">Zenodo record</a>
             {' · '}
             Cite: <a href={ZENODO_DOI_URL} target="_blank" rel="noopener noreferrer">{ZENODO_DOI}</a>

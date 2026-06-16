@@ -16,10 +16,12 @@
  * dead links.
  */
 
-// Placeholder — replace with the real Zenodo record once deposited.
-export const ZENODO_RECORD_ID = '0000000';
-export const ZENODO_DOI = '10.5281/zenodo.0000000';
-export const DATA_PUBLISHED = false;
+// Zenodo record holding the published GIS products.
+// ZENODO_RECORD_ID is the specific version used for direct file downloads;
+// ZENODO_DOI is the concept DOI (always resolves to the latest version) for citation.
+export const ZENODO_RECORD_ID = '20715276';
+export const ZENODO_DOI = '10.5281/zenodo.20715275';
+export const DATA_PUBLISHED = true;
 
 export const ZENODO_RECORD_URL = `https://zenodo.org/records/${ZENODO_RECORD_ID}`;
 export const ZENODO_DOI_URL = `https://doi.org/${ZENODO_DOI}`;
@@ -41,25 +43,25 @@ export const DATA_PRODUCTS = {
       {
         key: 'gcz',
         name: 'Global Climate Zones (GCZ)',
-        tif: 'IPCC_GlobalClimateZones(GCZ)_1995-2024_CRU409.tif',
+        tif: 'IPCC_GlobalClimateZones(GCZ)_CRU409_1995-2024.tif',
         zip: 'IPCC_GlobalClimateZones(GCZ)_CRU409_1995-2024.zip',
       },
       {
         key: 'gez',
         name: 'Global Ecological Zones (GEZ) — HLZ Level I',
-        tif: 'IPCC_GlobalEcologicalZones(GEZ)__HLZ_Level1_CRU409_1995-2024.tif',
-        zip: 'IPCC_GlobalEcologicalZones(GEZ)__HLZ_Level1_CRU409_1995-2024.zip',
+        tif: 'IPCC_GlobalEcologicalZones(GEZ)_HLZ_Level1_CRU409_1995-2024.tif',
+        zip: 'IPCC_GlobalEcologicalZones(GEZ)_HLZ_Level1_CRU409_1995-2024.zip',
       },
       {
         key: 'hlz2',
         name: 'Holdridge Life Zones — Level II',
-        tif: 'HoldridgeLifeZones(HLZ)_Level2_CRU409_1995-2024.tif',
+        tif: 'IPCC_HoldridgeLifeZones(HLZ)_Level2_CRU409_1995-2024.tif',
         zip: 'IPCC_HoldridgeLifeZones(HLZ)_Level2_CRU409_1995-2024.zip',
       },
       {
         key: 'hlz3',
         name: 'Holdridge Life Zones — Level III',
-        tif: 'HoldridgeLifeZones(HLZ)_Level3_CRU409_1995-2024.tif',
+        tif: 'IPCC_HoldridgeLifeZones(HLZ)_Level3_CRU409_1995-2024.tif',
         zip: 'IPCC_HoldridgeLifeZones(HLZ)_Level3_CRU409_1995-2024.zip',
       },
     ],
@@ -70,26 +72,26 @@ export const DATA_PRODUCTS = {
       {
         key: 'gcz',
         name: 'Global Climate Zones (GCZ)',
-        tif: 'IPCC_GlobalClimateZones(GCZ)_1995-2024_TerraClimate.tif',
-        zip: 'GlobalClimateZones(GCZ)_TerraClimate_1995-2024.zip',
+        tif: 'IPCC_GlobalClimateZones(GCZ)_TerraClimate_1995-2024.tif',
+        zip: 'IPCC_GlobalClimateZones(GCZ)_TerraClimate_1995-2024.zip',
       },
       {
         key: 'gez',
         name: 'Global Ecological Zones (GEZ) — HLZ Level I',
-        tif: 'IPCC_GlobalEcologicalZones(GEZ)__HLZ_Level1_TerraClimate_1995-2024.tif',
-        zip: 'GlobalEcologicalZones(GEZ)__HLZ_Level1_TerraClimate_1995-2024.zip',
+        tif: 'IPCC_GlobalEcologicalZones(GEZ)_HLZ_Level1_TerraClimate_1995-2024.tif',
+        zip: 'IPCC_GlobalEcologicalZones(GEZ)_HLZ_Level1_TerraClimate_1995-2024.zip',
       },
       {
         key: 'hlz2',
         name: 'Holdridge Life Zones — Level II',
-        tif: 'HoldridgeLifeZones(HLZ)_Level2_TerraClimate_1995-2024.tif',
-        zip: 'HoldridgeLifeZones(HLZ)_Level2_TerraClimate_1995-2024.zip',
+        tif: 'IPCC_HoldridgeLifeZones(HLZ)_Level2_TerraClimate_1995-2024.tif',
+        zip: 'IPCC_HoldridgeLifeZones(HLZ)_Level2_TerraClimate_1995-2024.zip',
       },
       {
         key: 'hlz3',
         name: 'Holdridge Life Zones — Level III',
-        tif: 'HoldridgeLifeZones(HLZ)_Level3_TerraClimate_1995-2024.tif',
-        zip: 'HoldridgeLifeZones(HLZ)_Level3_TerraClimate_1995-2024.zip',
+        tif: 'IPCC_HoldridgeLifeZones(HLZ)_Level3_TerraClimate_1995-2024.tif',
+        zip: 'IPCC_HoldridgeLifeZones(HLZ)_Level3_TerraClimate_1995-2024.zip',
       },
     ],
   },

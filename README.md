@@ -27,9 +27,13 @@ See the [app README](app_IPCC_land_stratification/README.md) for setup, developm
 
 The published GIS map products (GCZ, GEZ and HLZ layers as GeoTIFFs and shapefiles,
 for the CRU TS 4.09 and TerraClimate climatologies, 1995–2024) are archived on
-Zenodo with a citable DOI and can be downloaded directly with no account required.
-The DOI will be added here once the record is published; the layers are also
-linked per-product from within the app under **Explorer → Data & Downloads**.
+Zenodo and can be downloaded directly with no account required:
+
+**DOI: [10.5281/zenodo.20715275](https://doi.org/10.5281/zenodo.20715275)**
+
+The layers are also linked per-product from within the app under
+**Explorer → Data & Downloads**. The record additionally bundles the companion
+IPCC major soil types map ([Sinitambirivoutin et al. 2024](https://doi.org/10.1016/j.catena.2024.108258)).
 
 ## Background
 

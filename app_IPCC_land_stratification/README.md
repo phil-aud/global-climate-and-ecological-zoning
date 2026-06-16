@@ -113,11 +113,13 @@ The published GIS products are **not stored in this repository** (they are large
 binary rasters/vectors). They are archived on Zenodo with a citable DOI, so they
 can be downloaded directly with no account required:
 
-- **DOI:** _to be added once the Zenodo record is published_
+- **DOI:** [10.5281/zenodo.20715275](https://doi.org/10.5281/zenodo.20715275)
+  (Zenodo — direct downloads, no account required)
 - The record contains GeoTIFFs and zipped shapefiles of the Global Climate Zones
   (GCZ), Global Ecological Zones (GEZ), and the three Holdridge Life Zone (HLZ)
   aggregation levels, for both the CRU TS 4.09 (IPCC default) and TerraClimate
-  climatologies over 1995–2024, plus legends, ArcGIS symbology, and methodology notes.
+  climatologies over 1995–2024, plus legends, ArcGIS symbology, methodology notes,
+  and the companion IPCC major soil types map (Sinitambirivoutin et al. 2024).
 
 The web app surfaces these as per-product download links under
 **Explorer → Data & Downloads**. To wire them up after depositing the data, set

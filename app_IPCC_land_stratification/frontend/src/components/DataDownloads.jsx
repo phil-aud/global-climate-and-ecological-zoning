@@ -54,7 +54,7 @@ function DataDownloads({ dataset = 'cru' }) {
 
       <p className="panel-desc">
         Download the underlying GeoTIFF rasters for the maps contained in the app.
-        The rasters are showing the <strong>{group.label}</strong> climatology
+        The rasters are showing the {group.label} climatology
         together with the IPCC soil map.
       </p>
 

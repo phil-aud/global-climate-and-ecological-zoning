@@ -53,10 +53,9 @@ function DataDownloads({ dataset = 'cru' }) {
       </div>
 
       <p className="panel-desc">
-        Download the published layers as GeoTIFF rasters — the authoritative format
-        (the shapefile versions are a lossy conversion). Showing the{' '}
-        <strong>{group.label}</strong> climatology; switch above for the other. The
-        IPCC soil map is global (identical for both).
+        Download the underlying GeoTIFF rasters for the maps contained in the app.
+        The rasters are showing the <strong>{group.label}</strong> climatology
+        together with the IPCC soil map.
       </p>
 
       {!DATA_PUBLISHED && (

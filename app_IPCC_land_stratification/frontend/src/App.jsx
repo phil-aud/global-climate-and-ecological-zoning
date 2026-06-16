@@ -7,6 +7,7 @@ import MapComponent from './components/MapComponent';
 import ZonePanel from './components/ZonePanel';
 import SoilsPanel from './components/SoilsPanel';
 import ClimatePanel from './components/ClimatePanel';
+import DataDownloads from './components/DataDownloads';
 import Tour, { TourLauncher } from './components/Tour';
 import LandingPage from './components/LandingPage';
 import './styles/App.css';
@@ -365,6 +366,18 @@ function App() {
             coords={selectedCoords}
             zoneData={zoneData}
           />
+        </div>
+
+        {/* EXPLORER Data products / downloads section */}
+        <div className="explorer-section explorer-section--spaced-bottom" style={{ marginTop: 12 }} data-tour="downloads">
+          <div className="subtitle" role="note" aria-label="Data Downloads Subtitle">
+            <div className="subtitle-banner">
+              <span className="subtitle-left">EXPLORER</span>
+              <span className="subtitle-right">Data &amp; Downloads</span>
+            </div>
+          </div>
+
+          <DataDownloads dataset={dataset} />
         </div>
 
         <div className="panel-footer">

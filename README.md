@@ -23,6 +23,14 @@ See the [app README](app_IPCC_land_stratification/README.md) for setup, developm
 - **Data:** Holdridge Life Zone assets, CRU TS 4.09 (1901–2024), USGS GTOPO30 elevation
 - **Hosting:** Firebase Hosting
 
+## Data availability
+
+The published GIS map products (GCZ, GEZ and HLZ layers as GeoTIFFs and shapefiles,
+for the CRU TS 4.09 and TerraClimate climatologies, 1995–2024) are archived on
+Zenodo with a citable DOI and can be downloaded directly with no account required.
+The DOI will be added here once the record is published; the layers are also
+linked per-product from within the app under **Explorer → Data & Downloads**.
+
 ## Background
 
 The app builds on a globally consistent ecological zoning approach based on Holdridge life zones, and a Global Climate Zone (GCZ) map with an exact correspondence to the Global Ecological Zones (GEZ). For the full scientific methodology and the underlying map products, please consult the associated paper or contact the author.

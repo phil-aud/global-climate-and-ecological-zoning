@@ -150,9 +150,9 @@ function ZonePanel({ coords, zoneData, bioData, onCoordsChange, onZoneDataUpdate
       <div className="pyramids-group">
         <GlobalClimateZonesTriangle bioData={bioData} />
 
-        <HoldridgeTriangle bioData={bioData} imgSrc={'/pyramid1bis.svg'} hideReference={true} title="Global Ecological Zone pyramid" badge="GEZ" />
+        <HoldridgeTriangle bioData={bioData} imgSrc={'/global_ecological_zone_pyramid.svg'} hideReference={true} title="Global Ecological Zone pyramid" badge="GEZ" />
 
-        <HoldridgeTriangle bioData={bioData} imgSrc={'/pyramid1_grey.svg'} hideReference={true} title="Holdridge Life Zone pyramid" badge="HLZ" hideLegend={true} />
+        <HoldridgeTriangle bioData={bioData} imgSrc={'/holdridge_life_zone_pyramid.svg'} hideReference={true} title="Holdridge Life Zone pyramid" badge="HLZ" hideLegend={true} />
 
         <div className="holdridge-triangle-container">
           <div className="pyramid-subsection-header">
@@ -175,7 +175,7 @@ function ZonePanel({ coords, zoneData, bioData, onCoordsChange, onZoneDataUpdate
           </div>
           <div ref={altBeltsRef} style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
             <img
-              src="/Altidudinal_belts.svg"
+              src="/latitudinal_regions_altitudinal_belts.svg"
               alt="Latitudinal regions and altitudinal belts in the Holdridge Life Zones"
               style={{ width: '100%', height: 'auto', display: 'block' }}
             />
@@ -217,7 +217,7 @@ function ZonePanel({ coords, zoneData, bioData, onCoordsChange, onZoneDataUpdate
               </button>
               <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
                 <img
-                  src="/Altidudinal_belts.svg"
+                  src="/latitudinal_regions_altitudinal_belts.svg"
                   alt="Latitudinal regions and altitudinal belts in the Holdridge Life Zones"
                   style={{ width: '100%', height: 'auto', display: 'block' }}
                 />

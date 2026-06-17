@@ -35,18 +35,18 @@ const PRECIP = [62.5, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 // PET ratio — 9 values
 const PET_RATIO = [0.125, 0.25, 0.5, 1, 2, 4, 8, 16, 32];
 
-// ── pyramid1.svg overlay coordinate system ────────────────────────────────────
-// These values are read directly from pyramid1.svg (viewBox="230 0 1400 1163.13")
+// ── pyramid1_old.svg overlay coordinate system ────────────────────────────────────
+// These values are read directly from pyramid1_old.svg (viewBox="230 0 1400 1163.13")
 // Note: viewBox has an X offset (minX = 230) to crop left whitespace while keeping
 // the latitudinal region labels (leftmost at ~x=250) fully visible.
 const IMG_VIEWBOX_X = 230;
 const IMG_W = 1400;
 const IMG_H = 1163.13;
-// Triangle vertices in pyramid1.svg user-space
+// Triangle vertices in pyramid1_old.svg user-space
 const IMG_APEX = { x: 997.92, y: 298.13 };
 const IMG_BL   = { x: 603.77, y: 980.81 };
 const IMG_BR   = { x: 1392.06, y: 980.81 };
-// y-positions of the biotemperature boundary lines (class st18 in pyramid1.svg)
+// y-positions of the biotemperature boundary lines (class st18 in pyramid1_old.svg)
 const IMG_BT_Y = { 1.5: 583.63, 3: 666.63, 6: 748.63, 12: 830.63, 24: 912.63 };
 // y where the top-left/top-right edges of the outer polar hexagons intersect the triangle sides
 // (left hexagon top-left edge crosses left triangle side at y≈503.2;
@@ -153,7 +153,7 @@ function hexPath(cx, cy, r) {
   return `M${pts.join('L')}Z`;
 }
 
-// ── Group legend (matches the 5 colour groups originally in pyramid1.svg) ─────
+// ── Group legend (matches the 5 colour groups originally in pyramid1_old.svg) ─────
 const HLZ_LEGEND = [
   { label: 'Desert',                color: '#ee2531' },
   { label: 'Scrub/Woodland/Steppe', color: '#ff962e' },
@@ -331,14 +331,14 @@ function HoldridgeTriangle({ bioData, imgSrc, hideReference = false, title = 'Ho
     });
   }, []);
 
-  // Reference biotemperature line — driven by bioData, computed in pyramid1.svg coordinate space
+  // Reference biotemperature line — driven by bioData, computed in pyramid1_old.svg coordinate space
   // GEZ/HLZ pyramids use tBio (mean annual biotemperature at elevation), not the sea-level t0Bio.
   const refBiotempLine = useMemo(() => {
     const tBioSL = parseFloat(bioData?.biotemperature); // tBio — biotemperature at elevation, used for triangle axis
     const tBioElev = tBioSL;                            // same value used for label
     if (!tBioSL || isNaN(tBioSL)) return null;
     // Extend geometric progression one octave past 24° → 48°
-    // Spacing in pyramid1.svg is 82px per octave (doubling); 48° extrapolates to y=994.63
+    // Spacing in pyramid1_old.svg is 82px per octave (doubling); 48° extrapolates to y=994.63
     const btClamped = Math.max(1.5, Math.min(48, tBioSL));
     const f = Math.log2(btClamped / 1.5) / Math.log2(48 / 1.5);
     const yTop = IMG_BT_Y[1.5];  // 583.63
@@ -355,7 +355,7 @@ function HoldridgeTriangle({ bioData, imgSrc, hideReference = false, title = 'Ho
   }, [bioData?.biotemperature]);
 
   // Reference precipitation line — diagonal parallel to LEFT side (60° from base)
-  // Precipitation tick marks are along the BASE of the triangle in pyramid1.svg.
+  // Precipitation tick marks are along the BASE of the triangle in pyramid1_old.svg.
   // Iso-precip lines go from the base UPWARD at 60° (parallel to the left side BL→APEX)
   // to the right side of the triangle.
   const refPrecipLine = useMemo(() => {
@@ -379,7 +379,7 @@ function HoldridgeTriangle({ bioData, imgSrc, hideReference = false, title = 'Ho
   }, [bioData?.precipitation]);
 
   // Reference PET ratio line — parameterised via LEFT SIDE tick y-position (exact geometry).
-  // Actual left-side intersection y-values from pyramid1.svg iso-line geometry:
+  // Actual left-side intersection y-values from pyramid1_old.svg iso-line geometry:
   //   PET 0.125→y≈297, 0.25→379, 0.5→461, 1→544, 2→626, 4→707, 8→790, 16→872, 32→954
   // Anchor: PET=1 → left-side y=543.8, spacing=82.1px/octave.
   const refPetLine = useMemo(() => {
@@ -529,7 +529,7 @@ function HoldridgeTriangle({ bioData, imgSrc, hideReference = false, title = 'Ho
   const pyramidContent = imgSrc ? (
     <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
       <img src={imgSrc} alt="Holdridge Life Zone" style={{ width: '100%', height: 'auto', display: 'block' }} />
-      {/* SVG overlay — viewBox matches pyramid1.svg so coordinates align exactly */}
+      {/* SVG overlay — viewBox matches pyramid1_old.svg so coordinates align exactly */}
       <svg
         viewBox={`${IMG_VIEWBOX_X} 0 ${IMG_W} ${IMG_H}`}
         width="100%"

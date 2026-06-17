@@ -1,13 +1,13 @@
 /**
  * Global Climate Zones (HLZ pyramid)
  *
- * Displays pyramid2.svg with red iso-line overlays for:
+ * Displays global_climate_zone_pyramid.svg (the rendered figure) with red iso-line overlays for:
  *   - Mean annual biotemperature (horizontal line)
  *   - Annual precipitation (diagonal, parallel to left side)
  *   - PET ratio (diagonal, parallel to right side)
  * and an orange midpoint marker at the intersection of the three lines.
  *
- * Calibration constants are read directly from pyramid2.svg
+ * Calibration constants are read directly from pyramid2_old.svg
  * (viewBox="0 0 1370 1172.24").
  */
 
@@ -16,16 +16,16 @@ import { GCZ_PALETTE } from '../utils/zonePalettes';
 import DownloadButtons from './DownloadButtons';
 import { downloadCSV, downloadCompositePNG } from '../utils/exportFigure';
 
-// ── pyramid2.svg coordinate system ────────────────────────────────────────────
+// ── pyramid2_old.svg coordinate system ────────────────────────────────────────────
 const IMG2_W = 1370;
 const IMG2_H = 1172.24;
 
-// Triangle vertices in pyramid2.svg user-space
+// Triangle vertices in pyramid2_old.svg user-space
 const IMG2_APEX = { x: 752.15, y: 307.24 };
 const IMG2_BL   = { x: 358,    y: 989.92 };
 const IMG2_BR   = { x: 1146.3, y: 989.92 };
 
-// y-positions of the biotemperature boundary lines (class st12 in pyramid2.svg)
+// y-positions of the biotemperature boundary lines (class st12 in pyramid2_old.svg)
 // Spacing = 82.25 px per octave (same as pyramid1); extrapolated 48° = 921.74 + 82.25 = 1003.99
 const IMG2_BT_Y_TOP = 592.74;  // 1.5°C
 const IMG2_BT_Y_BOT = 1003.99; // extrapolated 48°C
@@ -242,7 +242,7 @@ function GlobalClimateZonesTriangle({ bioData }) {
   const pyramidContent = (
     <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
       <img
-        src="/pyramid2bis.svg"
+        src="/global_climate_zone_pyramid.svg"
         alt="Global Climate Zones (HLZ pyramid)"
         style={{ width: '100%', height: 'auto', display: 'block' }}
       />

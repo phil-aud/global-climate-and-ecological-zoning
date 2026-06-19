@@ -435,65 +435,6 @@ function HoldridgeTriangle({ bioData, imgSrc, hideReference = false, title = 'Ho
     return { x: (ax + bx) / 2, y: yBt };
   }, [refBiotempLine, refPrecipLine, refPetLine]);
 
-  // Frost-adjusted biotemperature line
-  // When seaLevelBT ≥ 18°C, observedBT < 18°C, AND frost days > 0.5, the dot is
-  // placed on the 18°C vertical frost line at the actual elevation.
-  // This gives frostAdjBT = 18 - elev*6/1000, which is the observedBT that a site
-  // at the 18°C frost boundary would have at this elevation.
-  //
-  // Geometric equivalence: at the 18°C frost line, each altitudinal belt spans the
-  // same BT range as its latitudinal counterpart (nival=polar, alpine=subpolar, …).
-  // The fraction within the belt — e.g. (elev - beltBase) / beltHeight in linear
-  // elevation space — is recovered exactly by frostAdjBT = 18 - elev*6/1000, and
-  // the log2 formula below then places the point at the correct geometric position
-  // within the equivalent latitudinal region of the pyramid.
-  const frostAdjBiotempLine = useMemo(() => {
-    const tBioSL = parseFloat(bioData?.biotemperature);
-    const elev = parseFloat(bioData?.elevation);
-    const frostDays = parseFloat(bioData?.frostDays);
-    if (isNaN(tBioSL) || isNaN(elev)) return null;
-    const observedBT = tBioSL - (elev * 6 / 1000);
-    if (tBioSL < 18 || observedBT >= 18) return null; // frost line not applicable
-    if (isNaN(frostDays) || frostDays <= 0.5) return null; // no frost → no adjustment
-    // frostAdjBT = observedBT at the 18°C frost line position for this elevation
-    const frostAdjBT = Math.max(0, 18 - (elev * 6 / 1000));
-    let yClipped;
-    if (frostAdjBT === 0) {
-      // BT reaches 0°C → clamp to 0°C = intersection of outer polar hexagons with triangle
-      yClipped = IMG_POLAR_0_Y;
-    } else {
-      // Log2 extrapolation — same scale as the rest of the diagram.
-      // Negative f values (frostAdjBT < 1.5°C) place the dot above the 1.5°C line
-      // (i.e. in the polar/nival region). Clamped to IMG_POLAR_0_Y (0°C upper limit).
-      const f = Math.log2(frostAdjBT / 1.5) / Math.log2(48 / 1.5);
-      const yTop = IMG_BT_Y[1.5];
-      const yBot = 994.63;
-      const y = yTop + f * (yBot - yTop);
-      yClipped = Math.max(IMG_POLAR_0_Y, Math.min(IMG_BL.y, y));
-    }
-    const triH = IMG_BL.y - IMG_APEX.y;
-    const t = (yClipped - IMG_APEX.y) / triH;
-    const x1 = IMG_APEX.x + (IMG_BL.x - IMG_APEX.x) * t;
-    const x2 = IMG_APEX.x + (IMG_BR.x - IMG_APEX.x) * t;
-    const label = frostAdjBT <= 0 ? '0° (frost adj.)' : `${Math.round(frostAdjBT * 10) / 10}° (frost adj.)`;
-    return { x1, y1: yClipped, x2, y2: yClipped, label };
-  }, [bioData?.biotemperature, bioData?.elevation, bioData?.frostDays]);
-
-  // Frost-adjusted life zone point — same P & PET lines, frost-adjusted tBio line
-  const frostAdjLifeZonePoint = useMemo(() => {
-    if (!frostAdjBiotempLine || !refPrecipLine || !refPetLine) return null;
-    const yBt = frostAdjBiotempLine.y1;
-    const dpx = IMG_APEX.x - IMG_BL.x;
-    const dpy = IMG_APEX.y - IMG_BL.y;
-    const drx = IMG_APEX.x - IMG_BR.x;
-    const dry = IMG_APEX.y - IMG_BR.y;
-    const tA = (yBt - refPrecipLine.y1) / dpy;
-    const ax = refPrecipLine.x1 + tA * dpx;
-    const tB = (yBt - refPetLine.y1) / dry;
-    const bx = refPetLine.x1 + tB * drx;
-    return { x: (ax + bx) / 2, y: yBt };
-  }, [frostAdjBiotempLine, refPrecipLine, refPetLine]);
-
   // Marker for current biodata point
   const marker = useMemo(() => {
     if (!bioData?.biotemperature || !bioData?.precipitation || !bioData?.petRatio) return null;
@@ -602,39 +543,6 @@ function HoldridgeTriangle({ bioData, imgSrc, hideReference = false, title = 'Ho
             <line x1={lifeZonePoint.x + 17} y1={lifeZonePoint.y} x2={lifeZonePoint.x + 26} y2={lifeZonePoint.y} stroke="orange" strokeWidth="2.5" />
             <line x1={lifeZonePoint.x} y1={lifeZonePoint.y - 26} x2={lifeZonePoint.x} y2={lifeZonePoint.y - 17} stroke="orange" strokeWidth="2.5" />
             <line x1={lifeZonePoint.x} y1={lifeZonePoint.y + 17} x2={lifeZonePoint.x} y2={lifeZonePoint.y + 26} stroke="orange" strokeWidth="2.5" />
-          </g>
-        )}
-        {frostAdjLifeZonePoint && lifeZonePoint && (
-          <g>
-            <defs>
-              <marker id="arrowhead-frost-pyr" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
-                <path d="M0,0 L0,6 L6,3 z" fill="#2563eb" />
-              </marker>
-            </defs>
-            {/* Dashed arrow from original → frost-adjusted point */}
-            <line
-              x1={lifeZonePoint.x} y1={lifeZonePoint.y}
-              x2={frostAdjLifeZonePoint.x} y2={frostAdjLifeZonePoint.y}
-              stroke="#2563eb" strokeWidth="2" strokeDasharray="7,4"
-              markerEnd="url(#arrowhead-frost-pyr)"
-            />
-            {/* Frost-adjusted dot (blue) */}
-            <circle cx={frostAdjLifeZonePoint.x} cy={frostAdjLifeZonePoint.y} r="30" fill="#2563eb" fillOpacity="0.10" stroke="none" />
-            <circle cx={frostAdjLifeZonePoint.x} cy={frostAdjLifeZonePoint.y} r="22" fill="#2563eb" fillOpacity="0.18" stroke="none" />
-            <circle cx={frostAdjLifeZonePoint.x} cy={frostAdjLifeZonePoint.y} r="14" fill="#2563eb" stroke="white" strokeWidth="3.5" />
-            <circle cx={frostAdjLifeZonePoint.x} cy={frostAdjLifeZonePoint.y} r="14" fill="none" stroke="#1e40af" strokeWidth="1.5" />
-            <line x1={frostAdjLifeZonePoint.x - 26} y1={frostAdjLifeZonePoint.y} x2={frostAdjLifeZonePoint.x - 17} y2={frostAdjLifeZonePoint.y} stroke="#2563eb" strokeWidth="2.5" />
-            <line x1={frostAdjLifeZonePoint.x + 17} y1={frostAdjLifeZonePoint.y} x2={frostAdjLifeZonePoint.x + 26} y2={frostAdjLifeZonePoint.y} stroke="#2563eb" strokeWidth="2.5" />
-            <line x1={frostAdjLifeZonePoint.x} y1={frostAdjLifeZonePoint.y - 26} x2={frostAdjLifeZonePoint.x} y2={frostAdjLifeZonePoint.y - 17} stroke="#2563eb" strokeWidth="2.5" />
-            <line x1={frostAdjLifeZonePoint.x} y1={frostAdjLifeZonePoint.y + 17} x2={frostAdjLifeZonePoint.x} y2={frostAdjLifeZonePoint.y + 26} stroke="#2563eb" strokeWidth="2.5" />
-            {/* Label */}
-            <text
-              x={frostAdjLifeZonePoint.x + 30} y={frostAdjLifeZonePoint.y}
-              textAnchor="start" fontSize="19" fill="#2563eb"
-              dominantBaseline="middle" fontWeight="700"
-            >
-              {frostAdjBiotempLine?.label}
-            </text>
           </g>
         )}
       </svg>

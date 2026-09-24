@@ -7,6 +7,7 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { queryZones } from '../utils/api';
 import HoldridgeTriangle from './HoldridgeTriangle';
 import GlobalClimateZonesTriangle from './GlobalClimateZonesTriangle';
+import AltitudinalBeltsChart, { STATIC_TMAX, extendedTMax } from './AltitudinalBeltsChart';
 import DownloadButtons from './DownloadButtons';
 import { downloadCSV, downloadCompositePNG } from '../utils/exportFigure';
 
@@ -15,6 +16,12 @@ function ZonePanel({ coords, zoneData, bioData, onCoordsChange, onZoneDataUpdate
   const [localLat, setLocalLat] = useState(coords?.lat ?? '');
   const [altBeltsExpanded, setAltBeltsExpanded] = useState(false);
   const altBeltsRef = useRef(null);
+  // Extended diagram: shown on request when the point is clamped by the static
+  // figure's 30 °C axis (see the clamp note below the first diagram).
+  const [extBeltsShown, setExtBeltsShown] = useState(false);
+  const [extBeltsExpanded, setExtBeltsExpanded] = useState(false);
+  const extBeltsRef = useRef(null);
+  const extBeltsSectionRef = useRef(null);
 
   const hasAltData = bioData && (bioData.t0Bio != null || bioData.elevation != null);
   const downloadAltBeltsCSV = () => {
@@ -47,12 +54,44 @@ function ZonePanel({ coords, zoneData, bioData, onCoordsChange, onZoneDataUpdate
     return { x, y };
   }, [bioData?.t0Bio, bioData?.elevation]);
 
+  // t0Bio above the static figure's 30 °C axis end is drawn at the right edge, which
+  // can place the point in the wrong altitudinal belt. The extended diagram redraws
+  // the same figure with the axis carried past that point.
+  const t0BioNum = parseFloat(bioData?.t0Bio);
+  const t0BioClamped = !isNaN(t0BioNum) && t0BioNum > STATIC_TMAX;
+  const extTMax = extendedTMax(t0BioNum);
+
+  const revealExtBelts = () => {
+    setAltBeltsExpanded(false);
+    setExtBeltsShown(true);
+    // Wait for the section to mount before scrolling to it.
+    requestAnimationFrame(() => {
+      extBeltsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const clampNote = (
+    <p className="alt-belts-clamp-note">
+      <strong>⚠ Point clamped to {STATIC_TMAX}°C.</strong> The sea-level biotemperature of this
+      point (t0Bio = {bioData?.t0Bio}°C) exceeds the {STATIC_TMAX}°C end of this diagram's axis,
+      so the point represented here is clamped to {STATIC_TMAX}°C and may not show the correct
+      life zone. For the correct full diagram, please refer to the link below:{' '}
+      <button type="button" className="alt-belts-clamp-link" onClick={revealExtBelts}>
+        show the extended diagram (0–{extTMax}°C)
+      </button>
+    </p>
+  );
+
   useEffect(() => {
-    if (!altBeltsExpanded) return;
-    const onKey = (e) => { if (e.key === 'Escape') setAltBeltsExpanded(false); };
+    if (!altBeltsExpanded && !extBeltsExpanded) return;
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      setAltBeltsExpanded(false);
+      setExtBeltsExpanded(false);
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [altBeltsExpanded]);
+  }, [altBeltsExpanded, extBeltsExpanded]);
 
   // Generation counter: incremented on every new fetch; used to discard stale responses
   const fetchGen = useRef(0);
@@ -203,7 +242,47 @@ function ZonePanel({ coords, zoneData, bioData, onCoordsChange, onZoneDataUpdate
           <p style={{ margin: '6px 4px 0', fontSize: 11, color: '#555', fontStyle: 'italic' }}>
             Approximate equivalence of latitudinal regions and altitudinal belts for Holdridge Life Zones (based on average 6° lapse rate)
           </p>
+          {t0BioClamped && clampNote}
         </div>
+
+        {t0BioClamped && extBeltsShown && (
+          <div className="holdridge-triangle-container" ref={extBeltsSectionRef}>
+            <div className="pyramid-subsection-header">
+              <span className="pyramid-subsection-title">
+                Latitudinal regions and altitudinal belts — extended to {extTMax}°C
+              </span>
+              <span className="hlz-header-actions">
+                <DownloadButtons
+                  label="extended latitudinal regions and altitudinal belts diagram"
+                  onPng={() => downloadCompositePNG(extBeltsRef.current, `latitudinal_regions_altitudinal_belts_${extTMax}C`)}
+                  onCsv={hasAltData ? downloadAltBeltsCSV : undefined}
+                />
+                <button
+                  className="hlz-maximize-btn"
+                  onClick={() => setExtBeltsExpanded(true)}
+                  title="Maximise"
+                  aria-label="Maximise extended altitudinal belts diagram"
+                >
+                  &#x26F6;
+                </button>
+                <button
+                  className="hlz-maximize-btn"
+                  onClick={() => setExtBeltsShown(false)}
+                  title="Hide"
+                  aria-label="Hide extended altitudinal belts diagram"
+                >
+                  &#x2715;
+                </button>
+              </span>
+            </div>
+            <div ref={extBeltsRef} style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
+              <AltitudinalBeltsChart bioData={bioData} tMax={extTMax} />
+            </div>
+            <p style={{ margin: '6px 4px 0', fontSize: 11, color: '#555', fontStyle: 'italic' }}>
+              Same diagram with the sea-level biotemperature axis carried to {extTMax}°C (elevation to {(extTMax / 6) * 1000} m) and every belt iso-line extended accordingly, so this point (t0Bio = {bioData?.t0Bio}°C) is placed on its correct altitudinal belt instead of being clamped to the {STATIC_TMAX}°C edge
+            </p>
+          </div>
+        )}
 
         {altBeltsExpanded && (
           <div className="hlz-modal-backdrop" onClick={() => setAltBeltsExpanded(false)}>
@@ -241,6 +320,24 @@ function ZonePanel({ coords, zoneData, bioData, onCoordsChange, onZoneDataUpdate
                     </g>
                   )}
                 </svg>
+              </div>
+              {t0BioClamped && clampNote}
+            </div>
+          </div>
+        )}
+
+        {t0BioClamped && extBeltsExpanded && (
+          <div className="hlz-modal-backdrop" onClick={() => setExtBeltsExpanded(false)}>
+            <div className="hlz-modal-content" onClick={e => e.stopPropagation()}>
+              <button
+                className="hlz-modal-close"
+                onClick={() => setExtBeltsExpanded(false)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+              <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
+                <AltitudinalBeltsChart bioData={bioData} tMax={extTMax} />
               </div>
             </div>
           </div>

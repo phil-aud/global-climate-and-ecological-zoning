@@ -258,7 +258,7 @@ function App() {
               className={`dataset-btn${dataset === 'terraclimate' ? ' dataset-btn--active' : ''}`}
               onClick={() => handleDatasetChange('terraclimate')}
             >
-              TerraClimate (5 km)
+              TerraClimate (~4 km)
             </button>
           </div>
 

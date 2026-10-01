@@ -19,7 +19,7 @@
 // Zenodo record holding the published GIS products.
 // ZENODO_RECORD_ID is the specific version used for direct file downloads;
 // ZENODO_DOI is the concept DOI (always resolves to the latest version) for citation.
-export const ZENODO_RECORD_ID = '20715276';
+export const ZENODO_RECORD_ID = '22957429';
 export const ZENODO_DOI = '10.5281/zenodo.20715275';
 export const DATA_PUBLISHED = true;
 
@@ -67,7 +67,7 @@ export const DATA_PRODUCTS = {
     ],
   },
   terraclimate: {
-    label: 'TerraClimate (~5 km)',
+    label: 'TerraClimate (~4 km)',
     products: [
       {
         key: 'gcz',
